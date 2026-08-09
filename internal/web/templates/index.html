@@ -1,0 +1,35 @@
+{{define "title"}}Applications — apprepo{{end}}
+{{define "content"}}
+<h1>Applications</h1>
+{{if .Apps}}
+<table>
+<tr><th>Name</th><th>Description</th><th>Latest</th><th>Versions</th></tr>
+{{range .Apps}}
+<tr>
+  <td><a href="/apps/{{.App.Name}}">{{.App.Name}}</a></td>
+  <td>{{.App.Description}}</td>
+  <td>{{with .Latest}}{{.Version}}{{else}}&mdash;{{end}}</td>
+  <td>{{.VersionsCount}}</td>
+</tr>
+{{end}}
+</table>
+{{else}}<p class="muted">No applications yet.</p>{{end}}
+{{/* кнопку и модалку роли без PermApp не видят вовсе: недоступное действие не
+     рисуется, а не ловится потом на 403 */}}
+{{if .Can.App}}
+<p><button onclick="document.getElementById('new-app-dialog').showModal()">New application</button></p>
+{{/* при ошибке формы модалка рендерится сразу открытой (атрибут open,
+     не-модально), чтобы баннер ошибки в layout оставался видимым */}}
+<dialog id="new-app-dialog"{{if eq .Dialog "new-app"}} open{{end}}>
+<h2>New application</h2>
+<form method="post" action="/apps" class="stack">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <label for="name">Name</label>
+  <input id="name" name="name" required>
+  <label for="description">Description</label>
+  <input id="description" name="description">
+  <p><button>Create</button> <button formmethod="dialog" formnovalidate>Cancel</button></p>
+</form>
+</dialog>
+{{end}}
+{{end}}

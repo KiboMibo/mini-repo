@@ -1,0 +1,284 @@
+{{define "title"}}{{.App.Name}} — apprepo{{end}}
+{{define "content"}}
+<div class="page-head">
+{{/* ссылка, а не history.back(): работает без JS, в новой вкладке и всегда
+     ведёт в раздел выше, а не «куда-то, откуда пришли» */}}
+<a class="back" href="/" title="Back to applications" aria-label="Back to applications">&lt;</a>
+<h1>{{.App.Name}}</h1>
+<span class="muted">Latest: {{with .Latest}}<strong>{{.Version}}</strong>{{else}}none{{end}}
+{{if .Pinned}}(pinned){{else}}(auto){{end}}</span>
+{{if and .Versions .Can.Version}}
+<form method="post" action="/apps/{{.App.Name}}/latest">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <select name="version">
+    <option value="auto" {{if not .Pinned}}selected{{end}}>auto (max semver)</option>
+    {{range .Versions}}<option value="{{.V.Version}}" {{if and $.Pinned .IsLatest}}selected{{end}}>{{.V.Version}}</option>{{end}}
+  </select>
+  <button>Set</button>
+</form>
+{{end}}
+</div>
+{{with .App.Description}}<p>{{.}}</p>{{end}}
+
+{{if .Versions}}
+<table>
+<tr><th>Version</th><th>Platform</th><th>File</th><th>Size, bytes</th><th>SHA-256</th><th>Uploaded</th><th></th></tr>
+{{range $row := .Versions}}
+<tr>
+  <td>{{.V.Version}} {{if .IsLatest}}<span class="badge">latest</span>{{end}}</td>
+  {{/* пустая платформа — видимый прочерк, а не пустая клетка: «неизвестно,
+       можно проставить» должно быть заметно */}}
+  {{if .V.Platform}}<td><code>{{.V.Platform}}</code></td>
+  {{else}}<td class="muted" title="Unknown — set it with the Platform button">&mdash;</td>{{end}}
+  <td><a href="/download/{{$.App.Name}}/{{.V.Version}}">{{.V.Filename}}</a></td>
+  <td>{{.V.SizeBytes}}</td>
+  <td><code title="{{.V.SHA256}}">{{printf "%.12s" .V.SHA256}}&hellip;</code></td>
+  <td>{{.V.CreatedAt.Format "2006-01-02 15:04"}}</td>
+  <td>
+    {{if $.Can.Version}}
+    <button onclick="document.getElementById('plat-{{.V.Version}}').showModal()">Platform</button>
+    {{/* ручная простановка: у архива определять нечего, а ошибочную можно
+         сбросить обратно в «неизвестно» первым пунктом списка ОС */}}
+    <dialog id="plat-{{.V.Version}}"{{if .DialogOpen}} open{{end}}>
+    <h2>Platform of {{.V.Version}}</h2>
+    <form method="post" action="/apps/{{$.App.Name}}/versions/{{.V.Version}}/platform" class="stack">
+      <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+      <select name="platform_os" aria-label="Operating system of {{.V.Version}}">
+        <option value=""{{if not $row.OS}} selected{{end}}>unknown</option>
+        {{/* особые значения (any, darwin/universal) — тоже из словаря пакета
+             (view.PlatformSpecial): пары с архитектурой у них нет, поэтому они
+             стоят в списке ОС целиком */}}
+        {{range $.PlatformSpecial}}<option value="{{.Value}}"{{if eq .Value $row.OS}} selected{{end}}>{{.Label}}</option>{{end}}
+        {{range $.PlatformOS}}<option value="{{.}}"{{if eq . $row.OS}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      <select name="platform_arch" aria-label="Architecture of {{.V.Version}}">
+        <option value=""{{if not $row.Arch}} selected{{end}}>&mdash;</option>
+        {{range $.PlatformArch}}<option value="{{.}}"{{if eq . $row.Arch}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      <p class="muted">Pick <em>unknown</em> to clear the platform again.</p>
+      <p><button>Save</button> <button formmethod="dialog" formnovalidate>Cancel</button></p>
+    </form>
+    </dialog>
+    <button onclick="document.getElementById('del-{{.V.Version}}').showModal()">Delete</button>
+    {{/* модалка на строку: подтверждение простое, вводить ничего не нужно */}}
+    <dialog id="del-{{.V.Version}}">
+    <p>Delete version <strong>{{.V.Version}}</strong> of {{$.App.Name}}? Its file is removed from disk.</p>
+    <form method="post" action="/apps/{{$.App.Name}}/versions/{{.V.Version}}/delete">
+      <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+      <button>Delete</button> <button formmethod="dialog" formnovalidate>Cancel</button>
+    </form>
+    </dialog>
+    {{end}}
+  </td>
+</tr>
+{{end}}
+</table>
+{{else}}<p class="muted">No versions yet.</p>{{end}}
+
+{{/* каждая кнопка и её модалка — под своим правом: чего роль не может, того
+     она и не видит */}}
+<p>
+{{if .Can.Version}}<button onclick="document.getElementById('upload-dialog').showModal()">Upload version</button>{{end}}
+{{if .Can.App}}<button onclick="document.getElementById('edit-dialog').showModal()">Edit</button>
+<button onclick="document.getElementById('delete-dialog').showModal()">Delete application</button>{{end}}
+</p>
+{{/* при ошибке формы её модалка рендерится сразу открытой (атрибут open,
+     не-модально), чтобы баннер ошибки в layout оставался видимым */}}
+{{if .Can.Version}}
+<dialog id="upload-dialog"{{if eq .Dialog "upload"}} open{{end}}>
+<h2>Upload version</h2>
+{{/* file обязан оставаться последним полем: хендлер читает части потоково по
+     порядку. То же и для отправки скриптом: FormData обходит поля формы в
+     порядке разметки, так что порядок частей у XHR тот же, что у браузера. */}}
+<form id="upload-form" method="post" action="/apps/{{.App.Name}}/versions" enctype="multipart/form-data" class="stack">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  {{/* value/selected — это возврат уже введённого после отказа (.Upload):
+       файл браузер вернуть не даст, а версию и платформу набирать заново
+       незачем. На успешной странице .Upload пуст и всё выглядит как всегда. */}}
+  <label for="version">Version (semver)</label>
+  <input id="version" name="version" required placeholder="1.2.3" value="{{.Upload.Version}}">
+  <label for="sha256">SHA-256 (optional)</label>
+  <input id="sha256" name="sha256" placeholder="hex digest" value="{{.Upload.SHA256}}">
+  {{/* списки — из словаря internal/platform (view.PlatformOS/PlatformArch), а
+       не перечислением в разметке: копия разъехалась бы с тем, что принимает
+       platform.Parse */}}
+  <label for="platform-os">Platform (optional)</label>
+  <select id="platform-os" name="platform_os">
+    <option value=""{{if not .Upload.OS}} selected{{end}}>detect automatically</option>
+    {{range .PlatformSpecial}}<option value="{{.Value}}"{{if eq .Value $.Upload.OS}} selected{{end}}>{{.Label}}</option>{{end}}
+    {{range .PlatformOS}}<option value="{{.}}"{{if eq . $.Upload.OS}} selected{{end}}>{{.}}</option>{{end}}
+  </select>
+  <select name="platform_arch" aria-label="Architecture">
+    <option value=""{{if not .Upload.Arch}} selected{{end}}>&mdash;</option>
+    {{range .PlatformArch}}<option value="{{.}}"{{if eq . $.Upload.Arch}} selected{{end}}>{{.}}</option>{{end}}
+  </select>
+  <p class="muted">Leave it on <em>detect automatically</em> for a plain binary — the OS and
+    architecture are read from the file itself. An archive carries nothing to read, so pick
+    the pair by hand (or <em>any</em> for a file that does not depend on a platform),
+    otherwise the upload is refused.</p>
+  <label for="file">File</label>
+  <input id="file" name="file" type="file" required>
+  {{/* прогресс и сообщение об обрыве показывает только скрипт; без JS они
+       остаются hidden, а форма отправляется обычным способом */}}
+  <p id="upload-failed" class="error" hidden></p>
+  <p id="upload-progress" hidden><progress id="upload-bar" max="100" value="0"></progress>
+    <span id="upload-percent" class="muted"></span></p>
+  <p><button id="upload-submit">Upload</button>
+    <button formmethod="dialog" formnovalidate>Cancel</button>
+    <button type="button" id="upload-abort" hidden>Cancel upload</button></p>
+</form>
+</dialog>
+{{/* Прогрессивное улучшение: форма выше — обычная multipart-форма и работает
+     без JS. Скрипт лишь перехватывает отправку и шлёт то же тело тем же
+     адресом через XMLHttpRequest — ради upload.onprogress, которого у fetch
+     нет. Без зависимостей и без CDN: inline, как и весь остальной JS в UI. */}}
+<script>
+(function () {
+  var form = document.getElementById('upload-form');
+  if (!form || !window.FormData || !window.DOMParser || !new XMLHttpRequest().upload) return;
+  var bar = document.getElementById('upload-bar');
+  var percent = document.getElementById('upload-percent');
+  var progress = document.getElementById('upload-progress');
+  var failed = document.getElementById('upload-failed');
+  var submit = document.getElementById('upload-submit');
+  var abort = document.getElementById('upload-abort');
+  var xhr = null;
+  // sent = тело целиком ушло в сокет. После этого сервер уже может дописать
+  // файл и создать версию, а обрыв соединения его не останавливает — значит
+  // утверждать «ничего не сохранено» скрипт больше не вправе (R7-sec, S1).
+  var sent = false;
+
+  function size(n) {
+    var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (i ? n.toFixed(1) : n) + ' ' + u[i];
+  }
+
+  // idle возвращает форму в исходный вид: поля и выбранный файл остаются на
+  // месте, чтобы после обрыва не пришлось набирать всё заново.
+  function idle(msg) {
+    xhr = null;
+    progress.hidden = true;
+    abort.hidden = true;
+    submit.hidden = false;
+    failed.textContent = msg || '';
+    failed.hidden = !msg;
+  }
+
+  // serverMessage достаёт человеческий текст из ответа: на 4xx/5xx сервер
+  // отдаёт ту же страницу с баннером .error, на отказ CSRF — короткий plain text.
+  function serverMessage(x) {
+    var doc = new DOMParser().parseFromString(x.responseText || '', 'text/html');
+    var el = doc.querySelector('.error') || doc.body;
+    var text = el ? el.textContent.trim() : '';
+    return text && text.length <= 300 ? text : 'Upload failed (HTTP ' + x.status + ').';
+  }
+
+  // Текст на случай обрыва после того, как тело ушло целиком: чем кончилось
+  // дело на сервере, скрипт не знает и утверждать не должен.
+  var afterSent = 'The file had already been sent, so the server may have published this version. ' +
+    'Reload the page and check the list of versions before uploading again.';
+
+  // sameOrigin возвращает адрес из ответа, только если он свой. XHR проходит
+  // редиректы сам, поэтому responseURL — это то, что назвал сервер; хендлер,
+  // который однажды начнёт строить абсолютный Location, увёл бы страницу
+  // наружу (R7-sec, S2). Не разобрался или чужой origin — null.
+  function sameOrigin(raw) {
+    try {
+      var u = new URL(raw || '', location.href);
+      return u.origin === location.origin ? u : null;
+    } catch (e) { return null; }
+  }
+
+  abort.addEventListener('click', function () { if (xhr) { xhr.abort(); } });
+
+  form.addEventListener('submit', function (e) {
+    // Кнопка Cancel закрывает модалку через formmethod="dialog", но событие
+    // submit всё равно приходит — её пропускаем. Неизвестный submitter (очень
+    // старый браузер) тоже отдаём браузеру: обычная отправка лучше зависшей.
+    if (!e.submitter || e.submitter.formMethod === 'dialog') { return; }
+    e.preventDefault();
+    idle('');
+    sent = false;
+    submit.hidden = true;
+    abort.hidden = false;
+    progress.hidden = false;
+    bar.value = 0;
+    percent.textContent = 'starting…';
+
+    xhr = new XMLHttpRequest();
+    xhr.open('POST', form.action);
+    xhr.upload.onprogress = function (ev) {
+      if (!ev.lengthComputable) { percent.textContent = size(ev.loaded) + ' sent'; return; }
+      var p = Math.floor(ev.loaded * 100 / ev.total);
+      bar.value = p;
+      percent.textContent = p + '% — ' + size(ev.loaded) + ' of ' + size(ev.total);
+    };
+    // Тело ушло, но ответа ещё нет: сервер считает SHA-256 и публикует файл.
+    // Отменять с этого момента нечего — кнопка отмены убирается, иначе она
+    // обещает несуществующий откат уже опубликованной версии.
+    xhr.upload.onload = function () {
+      sent = true;
+      abort.hidden = true;
+      percent.textContent = 'finishing on the server…';
+    };
+    xhr.onload = function () {
+      var to = sameOrigin(xhr.responseURL);
+      if (xhr.status >= 200 && xhr.status < 400) {
+        // Истёкшая посреди заливки сессия: RequireSession отвечает 303 на
+        // /login, XHR проходит редирект молча и приносит 200 со страницей
+        // входа. Это не успех — версии нет, и молчать об этом нельзя.
+        if (to && to.pathname === '/login') {
+          location.replace('/login?m=session-expired&next=' + encodeURIComponent(location.pathname));
+          return;
+        }
+        // Успех — 303 на страницу приложения; XHR прошёл редирект сам, так что
+        // responseURL уже указывает на неё. Переходим туда: replace, а не href,
+        // потому что чаще всего это тот же адрес и лишняя запись в истории
+        // вела бы на устаревшую копию страницы.
+        location.replace(to ? to.href : location.href);
+        return;
+      }
+      idle(serverMessage(xhr));
+    };
+    xhr.onerror = function () {
+      idle(sent ? afterSent : 'Upload failed: the connection to the server was lost before the ' +
+        'file was sent in full, so no version was created. You can try again.');
+    };
+    xhr.onabort = function () {
+      idle(sent ? afterSent : 'Upload cancelled before the file was sent in full: no version was created.');
+    };
+    xhr.send(new FormData(form));
+  });
+})();
+</script>
+{{end}}
+
+{{if .Can.App}}
+<dialog id="edit-dialog"{{if eq .Dialog "edit"}} open{{end}}>
+<h2>Edit application</h2>
+<form method="post" action="/apps/{{.App.Name}}/edit" class="stack">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <label for="edit-name">Name</label>
+  <input id="edit-name" name="name" required value="{{.App.Name}}">
+  <label for="edit-description">Description</label>
+  <input id="edit-description" name="description" value="{{.App.Description}}">
+  <p class="muted">Renaming moves the download URLs too: existing links to
+    <code>/download/{{.App.Name}}/…</code> stop working.</p>
+  <p><button>Save</button> <button formmethod="dialog" formnovalidate>Cancel</button></p>
+</form>
+</dialog>
+
+<dialog id="delete-dialog"{{if eq .Dialog "delete"}} open{{end}}>
+<h2>Delete application</h2>
+<p>This deletes <strong>{{.App.Name}}</strong> with all {{len .Versions}} version(s)
+  and their files on disk. It cannot be undone.</p>
+<form method="post" action="/apps/{{.App.Name}}/delete" class="stack">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <label for="confirm">Type <code>{{.App.Name}}</code> to confirm</label>
+  <input id="confirm" name="confirm" required autocomplete="off">
+  <p><button>Delete application</button> <button formmethod="dialog" formnovalidate>Cancel</button></p>
+</form>
+</dialog>
+{{end}}
+{{end}}

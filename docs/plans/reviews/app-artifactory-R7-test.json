@@ -1,0 +1,146 @@
+{
+  "skill": "coding-test",
+  "status": "FAIL",
+  "date": "2026-08-08",
+  "scope": {
+    "source": "plan:docs/plans/2026-08-06-app-artifactory.md#R7-test",
+    "tasks": ["T22", "T23", "F17"],
+    "base_ref": "f2f722f561f3d86190f086e1d577a964e40322b5",
+    "base_note": "merge-base с develop",
+    "files": [
+      "internal/api/api.go",
+      "internal/web/templates/app.html",
+      "internal/web/templates/layout.html"
+    ],
+    "tests_owned": ["internal/integration/r7_*_test.go"],
+    "note": "Сквозные сценарии на собранном app.New + httptest. Unit-тесты internal/api/api_t23_test.go и internal/web/web_t22_test.go написаны исполнителями задач и не дублировались; достроено то, чего на уровне пакета не видно — настоящие архивы, состояние диска и БД после отказа, обрыв соединения, границы лимита."
+  },
+  "tests": {
+    "added": 26,
+    "added_nodes": 35,
+    "files": [
+      "internal/integration/r7_helpers_test.go",
+      "internal/integration/r7_archive_test.go",
+      "internal/integration/r7_filename_test.go",
+      "internal/integration/r7_form_test.go",
+      "internal/integration/r7_abort_test.go"
+    ],
+    "run_command": "go test -count=1 ./...",
+    "baseline": { "passed": "все пакеты ok", "failed": 0 },
+    "final": { "passed": 33, "failed": 2 },
+    "failing": [
+      "internal/integration/r7_filename_test.go › TestPutVersionFilenameIsMandatory/whitespace_only"
+    ],
+    "failing_note": "Два падения в отчёте прогона — это один дефект: подтест whitespace_only и его родитель TestPutVersionFilenameIsMandatory.",
+    "flaky": [],
+    "known_defect_marked": [],
+    "skipped": [
+      "internal/integration/r7_archive_test.go › TestContentTypeComesFromExtensionNotContent — t.Skip только если в системной таблице MIME нет .zip; в этом окружении не пропускался"
+    ],
+    "stability": "internal/integration прогнан 2× с -count=1 -shuffle=on (сиды 1786198696127504996, 1786198810004233566): падение одно и то же, миганий нет."
+  },
+  "coverage": {
+    "changed_lines_pct": 100.0,
+    "threshold": 80,
+    "threshold_met": true,
+    "repo_pct": 69.2,
+    "changed_lines_total": 10,
+    "basis": "go test -count=1 -coverpkg=./internal/...,./cmd/... -coverprofile по всему модулю; изменённые строки — git diff от merge-base с develop (f2f722f). Профиль CLI отдельным инструментированным бинарником не снимался (волна CLI не трогает), поэтому repo_pct занижен относительно R6-test.",
+    "per_file": {
+      "internal/api/api.go": 100.0
+    },
+    "not_measurable": {
+      "internal/web/templates/app.html": "+101 строка (из них ~80 — inline-скрипт): разметка и JS, покрытие Go их не видит",
+      "internal/web/templates/layout.html": "+1 строка CSS"
+    },
+    "note": "Изменённых исполняемых строк Go в волне всего десять: T23 — удаление дефолта плюс одна ветка отказа, серверный код T22 не менялся. Основной объём волны — шаблоны, они в метрику не попадают в принципе; что из T22 проверено, а что нет, перечислено в MD-отчёте."
+  },
+  "findings": [
+    {
+      "id": "R7-F1",
+      "severity": "важная",
+      "title": "?filename= из одних пробелов принимается — 201 вместо 400 filename_required",
+      "file": "internal/api/api.go",
+      "line": 590,
+      "test": "internal/integration/r7_filename_test.go › TestPutVersionFilenameIsMandatory/whitespace_only",
+      "detail": "T23 проверяет строгое равенство пустой строке, поэтому значение из одних пробелов (?filename=%20%20%20) до проверки не дотягивается; naming.ValidateFilename его тоже пропускает (не пусто, нет разделителей, не '.' и не '..'). Ответ 201, создаётся версия с filename=\"   \": файл с именем из пробелов на диске и Content-Disposition: attachment; filename=\"   \".",
+      "impact": "Остаётся жить тот же класс отказа, ради устранения которого делалась волна: скачанный архив под непригодным именем. Клиент CI с пустой переменной (?filename=$ARTIFACT) вместо внятного 400 с инструкцией молча создаёт негодную версию.",
+      "proposal": "filename := strings.TrimSpace(r.URL.Query().Get(\"filename\")) — strings в пакете уже импортирован.",
+      "fix_verified": true,
+      "fix_verification": "На копии репозитория с этой правкой go test ./... полностью зелёный без единой правки в тестах: тесты не переспецифицированы, гипотеза починки верна. Пробелы внутри имени остаются законными и закреплены зелёным TestPutVersionFilenameWithSpacesInside.",
+      "blocking": false
+    },
+    {
+      "id": "R7-N1",
+      "severity": "замечание",
+      "title": "Лимит загрузки в UI меряется прочитанными байтами, а не размером тела",
+      "file": "internal/web/web.go",
+      "line": 409,
+      "test": "internal/integration/r7_abort_test.go › TestUIUploadLimitIsCountedOnBytesRead",
+      "detail": "http.MaxBytesReader считает прочитанные байты, а multipart-разборщик заканчивает файловую часть на закрывающей границе и хвост за ней не дочитывает. Замерено на лимите 64 KiB: тело limit+1 → 303, limit+10 → 413.",
+      "impact": "Практически ничего: погрешность в единицы байт на многомегабайтном MaxUploadBytes, сохранённый файл лимит не превышает. Внесено, чтобы никто не завёл на этом мигающий тест с ожиданием отказа ровно на limit+1.",
+      "proposal": "Действий не требует; при желании — оговорка в docs/api.md о том, что лимит применяется к прочитанным байтам.",
+      "blocking": false
+    },
+    {
+      "id": "R7-N2",
+      "severity": "замечание",
+      "title": "Content-Type архивов зависит от системной таблицы MIME",
+      "file": "internal/api/api.go",
+      "line": 753,
+      "test": "internal/integration/r7_archive_test.go › TestContentTypeComesFromExtensionNotContent",
+      "detail": "Расширений .gz и .zip нет во встроенной таблице Go — они приходят из /etc/mime.types. В минимальном образе (scratch, distroless) mime.TypeByExtension вернёт пустую строку и ServeContent определит тип по сигнатуре содержимого.",
+      "impact": "Для настоящих архивов результат остаётся правильным (application/x-gzip, application/zip), пользователь разницы не заметит; механизмы расходятся только на файле, чьё содержимое не опознаётся сигнатурой. Стоит помнить при переезде в минимальный контейнер.",
+      "proposal": "Ничего не менять; при переезде в минимальный образ — либо класть mime.types в образ, либо регистрировать нужные типы через mime.AddExtensionType при старте.",
+      "blocking": false
+    }
+  ],
+  "blocking_findings": [],
+  "pre_existing_failures": [],
+  "mutation_testing": {
+    "tool_run": false,
+    "tool_note": "В проекте не настроен go-mutesting или аналог; ставить ради одного прогона — менять зависимости проекта, решение команды.",
+    "spot_checks": [
+      { "mutant": "internal/api/api.go: возвращён молчаливый дефолт {app}-{version}", "killed": true },
+      { "mutant": "internal/api/api.go: Content-Disposition без параметра filename", "killed": true },
+      { "mutant": "internal/api/api.go: ServeContent с именем download.bin вместо v.Filename", "killed": true, "note": "Сначала выжил — проверка Content-Type не отличала определение по расширению от определения по сигнатуре. Добавлен TestContentTypeComesFromExtensionNotContent (текст под именем .zip), после чего убит." },
+      { "mutant": "internal/files/files.go: убрано os.Remove(tmp.Name()) в откате Prepare", "killed": true },
+      { "mutant": "internal/web/templates/app.html: удалены блок прогресса и кнопка отмены", "killed": true },
+      { "mutant": "internal/web/web.go: снята проверка CSRF на загрузке", "killed": true }
+    ],
+    "production_tree_clean": true,
+    "production_tree_note": "Все внесённые дефекты откачены, git diff по продуктовым путям пуст; git status содержит только новые internal/integration/r7_*_test.go."
+  },
+  "not_covered": {
+    "reason": "Go-тесты не исполняют JavaScript, браузерного раннера в проекте нет, новых зависимостей добавлять нельзя.",
+    "items": [
+      "перехват submit и preventDefault (что форма уходит через XHR, а не обычной отправкой)",
+      "upload.onprogress: расчёт процента, отрисовка полосы, формат объёма (функция size), ветка !ev.lengthComputable",
+      "xhr.upload.onload → надпись finishing on the server…",
+      "переход после успеха: location.replace(xhr.responseURL || location.href)",
+      "serverMessage: разбор ответа через DOMParser, выбор .error, ограничение 300 символов, запасной текст",
+      "idle(): возврат формы в исходный вид с сохранением выбранного файла",
+      "пропуск кнопки Cancel по e.submitter.formMethod === 'dialog' и отдача управления браузеру при неизвестном submitter",
+      "ранний выход по feature-detection (window.FormData, DOMParser, new XMLHttpRequest().upload)",
+      "нажатие «Cancel upload» как событие в браузере"
+    ],
+    "compensating_coverage": "Разметка, на которую опирается скрипт, присутствует и не ломается экранированием html/template; внешних ресурсов нет; серверный путь скрипта (тот же адрес, то же тело, тот же порядок частей, тот же CSRF) проверен сквозным тестом; сетевое следствие xhr.abort() (обрыв соединения посреди тела) проверено на сервере фактически — ни временного файла, ни каталога версии, ни строки в БД."
+  },
+  "assumptions": [
+    "Красный тест оставлен красным (не помечен t.Skip): общего CI, который бы этим блокировался, в репозитории нет, а соседняя задача волны R7-sec пишет только отчёт и от прогона тестов не зависит.",
+    "Продуктовый код не правился, включая находку R7-F1 с известной и проверенной починкой, — это отдельная задача исправления (F18 в терминах coding-plan).",
+    "Имя из одних пробелов отнесено к находкам, а не к замечаниям, хотя буквально в контракте записано «отсутствующий или пустой»: цена ошибки та же, ради которой делалась волна, а починка — одна строка. Уровень «важная», не «блокирующая».",
+    "Архивы (.tar.gz, .zip) собираются в тесте, а не лежат бинарными фикстурами: бинарная фикстура не читается в ревью и незаметно протухает.",
+    "Проверки Content-Type сверяются со списком допустимых значений, а не с одной строкой — иначе тест мигал бы от образа к образу (см. R7-N2).",
+    "Браузерный раннер (Playwright/chromedp) не заводился: новая зависимость запрещена постановкой и является решением команды; вместо этого непроверяемое честно перечислено.",
+    "Тест на превышение лимита в UI использует запас 1024 байта, а не «ровно на байт больше» (см. R7-N1); граница зафиксирована отдельным тестом, допускающим оба исхода.",
+    "База для diff'а информативна, поэтому покрытие изменённых строк считалось обычным способом; оговорка сделана только о том, что шаблоны в эту метрику не попадают в принципе."
+  ],
+  "reports": {
+    "markdown": "docs/plans/reviews/app-artifactory-R7-test.md",
+    "json": "docs/plans/reviews/app-artifactory-R7-test.json"
+  },
+  "next": {
+    "recommendation": "Завести задачу исправления на R7-F1 (одна строка strings.TrimSpace в internal/api/api.go:590, починка уже проверена на копии) и после неё перепрогнать go test ./... — набор обязан стать полностью зелёным. Волна 7 в остальном подтверждена: многофайловые релизы через API и UI, совместимость старых имён, работа формы без JS, уборка после обрыва и границы лимита."
+  }
+}

@@ -1,0 +1,22 @@
+{{define "title"}}Not available — apprepo{{end}}
+{{define "content"}}
+<h1>Not available for your role</h1>
+{{if .Can.UI}}
+<p>Your role{{with .User}} <strong>{{.Role}}</strong>{{end}} does not allow this
+  action. Ask an administrator if you need it.</p>
+<p><a href="/">Back to applications</a></p>
+{{else}}
+{{/* сюда попадает deployer: у роли нет PermUI вовсе. Отдаём объяснение, а не
+     пустой 403 и не редирект на /login — сессия-то действительна */}}
+<p>{{with .User}}You are signed in as <strong>{{.Username}}</strong> with the role
+  <strong>{{.Role}}</strong>. {{end}}This role gives access to the API and to
+  direct download links only — the web interface is not available to it.</p>
+<p>Use the same credentials with HTTP Basic authentication:</p>
+<ul>
+  <li><code>/api/…</code> — the JSON API (uploads, listings)</li>
+  <li><code>/download/{app}/{version}</code> — direct downloads</li>
+</ul>
+<p class="muted">If you need the web interface, ask an administrator to change
+  your role.</p>
+{{end}}
+{{end}}

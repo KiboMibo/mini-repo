@@ -1,0 +1,80 @@
+{
+  "skill": "coding-test",
+  "status": "PASS",
+  "date": "2026-08-06",
+  "scope": {
+    "source": "plan:docs/plans/2026-08-06-app-artifactory.md#R4-test",
+    "base": "d1e410d (merge-base с develop, конец волны 2)",
+    "files": [
+      "internal/auth/auth.go",
+      "internal/web/web.go",
+      "internal/api/api.go",
+      "internal/app/app.go",
+      "cmd/apprepo/main.go",
+      "internal/store/user_by_id.go"
+    ]
+  },
+  "tests": {
+    "added": 28,
+    "added_with_subtests": 98,
+    "location": "internal/integration/",
+    "run_command": "go test ./internal/integration/",
+    "baseline": { "passed": "все пакеты зелёные", "failed": 0 },
+    "final": { "passed": 28, "failed": 0 },
+    "failing": [],
+    "flaky": [],
+    "stability_runs": ["default x2", "-shuffle=on", "-race"],
+    "smoke_sh": "OK"
+  },
+  "coverage": {
+    "changed_lines_pct": 82.2,
+    "changed_lines": 847,
+    "covered_lines": 696,
+    "threshold": 80,
+    "threshold_met": true,
+    "repo_pct": 84.5,
+    "per_file": {
+      "internal/app/app.go": 100.0,
+      "internal/auth/auth.go": 95.1,
+      "internal/store/user_by_id.go": 85.7,
+      "internal/api/api.go": 82.4,
+      "internal/web/web.go": 81.0,
+      "cmd/apprepo/main.go": 65.5
+    },
+    "method": "go test -coverpkg=./... + GOCOVERDIR-прогоны инструментированного бинарника (serve/user add), слитый профиль, diff_coverage.py --base d1e410d",
+    "notes": "непокрыто: интерактивный ввод пароля (нужен pty), ошибка ListenAndServe (порт 1 биндится под root), 500-ветки хендлеров на ошибках БД (деградация проверена на уровне middleware)"
+  },
+  "findings": [
+    {
+      "severity": "note",
+      "title": "Content-Disposition отдаёт filename токеном без кавычек",
+      "file": "internal/api/api.go",
+      "line": 456,
+      "impact": "Расходится с буквальной записью контракта filename=\"{filename}\"; поведенчески корректно (RFC 6266), клиенты обрабатывают.",
+      "suggestion": "Ничего не менять; зафиксировать формулировку в docs/api.md (R4-qa).",
+      "test": "TestAPIHappyPath/download_latest_serves_bytes_and_headers"
+    },
+    {
+      "severity": "note",
+      "title": "500-ветки хендлеров при ошибках БД не проверяемы снаружи",
+      "file": "internal/web/web.go",
+      "line": null,
+      "impact": "~15% строк web/api — ветки internal-ошибок, недостижимые без инъекции ошибок store.",
+      "suggestion": "При необходимости — интерфейс store на стороне потребителя; сейчас не требуется."
+    }
+  ],
+  "sensitivity_check": {
+    "spot_check": { "tests_checked": 7, "detected_defect": 7 },
+    "not_overspecified": { "checked": true, "green_after_fix": null, "reason": "падающих тестов нет — проверять нечего" },
+    "mutation": { "run": false, "reason": "go-mutesting в проекте не настроен" }
+  },
+  "assumptions": [
+    "Ветка сброшена командиром на wave/app-artifactory-w3 (2785500) с T7 в базе; мой ручной мерж feat/T7-integration отброшен.",
+    "Prerelease старшего мажора становится latest — контракт R2-test, не баг; проверена консистентность UI/API.",
+    "Граница max-upload точно проверена на API PUT; для UI (multipart) — только превышение.",
+    "Рост памяти от размера файла явно не измерялся: потоковость покрыта R2-test и подтверждена чтением кода хендлеров.",
+    "Покрытие main.go — через GOCOVERDIR-прогоны бинарника; те же CLI-сценарии продублированы тестом TestUserAddCLI."
+  ],
+  "report_md": "docs/plans/reviews/app-artifactory-R4-test.md",
+  "next_action": "Волна закрыта, можно мержить и переходить к F4/сведению R4-*: блокирующих находок нет."
+}

@@ -1,0 +1,78 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{block "title" .}}apprepo{{end}}</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;color:#1f2937}
+header{display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;background:#1f2937;color:#fff}
+header a{color:#fff;text-decoration:none;font-weight:600}
+header form{margin:0}
+/* левый отступ шире правого — в него выходит стрелка «назад» (.page-head),
+   чтобы заголовок вставал ровно по левому краю таблицы */
+main{max-width:60rem;margin:1.5rem auto;padding:0 1rem 0 2.6rem}
+table{border-collapse:collapse;width:100%;margin:1rem 0}
+th,td{text-align:left;padding:.4rem .6rem;border-bottom:1px solid #e5e7eb}
+/* первая колонка без левого отступа — её текст встаёт ровно под заголовком страницы */
+th:first-child,td:first-child{padding-left:0}
+.error{background:#fee2e2;border:1px solid #ef4444;padding:.5rem .8rem;border-radius:4px}
+.notice{background:#d1fae5;border:1px solid #059669;padding:.5rem .8rem;border-radius:4px}
+header nav{display:flex;align-items:center;gap:.8rem}
+header .muted{color:#d1d5db}
+.badge{background:#059669;color:#fff;border-radius:3px;padding:.05rem .4rem;font-size:.75rem}
+.muted{color:#6b7280;font-size:.9rem}
+form.stack label{display:block;margin:.6rem 0 .2rem}
+form.stack input{width:100%;max-width:24rem;box-sizing:border-box}
+input,select,button{font:inherit;padding:.35rem .5rem;border:1px solid #d1d5db;border-radius:4px}
+button{cursor:pointer;background:#1f2937;color:#fff;border:0}
+code{font-size:.85em}
+/* сдвиг влево ровно на ширину стрелки с зазором (.8rem + gap .8rem): заголовок
+   встаёт на левый край контента, стрелка уходит в поле слева */
+.page-head{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin-left:-1.6rem}
+.page-head h1{margin:0}
+/* Стрелка «назад» — обычная ссылка на раздел выше: работает без JS, в новой
+   вкладке и предсказуемее истории браузера. Ширина фиксирована: от неё считается
+   сдвиг .page-head, а ширина глифа зависела бы от шрифта. */
+.back{font-size:1.6rem;line-height:1;text-decoration:none;color:inherit;width:.8rem;text-align:center}
+/* min-width держит короткие подтверждения читаемыми, max-width — не даёт
+   длинному тексту подсказки растянуть модалку во весь экран */
+dialog{border:1px solid #d1d5db;border-radius:6px;padding:1rem 1.2rem;min-width:20rem;max-width:min(34rem,calc(100vw - 2rem));box-sizing:border-box}
+progress{width:100%;max-width:24rem;vertical-align:middle}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+</style>
+</head>
+<body>
+<header>
+  <a href="/">apprepo</a>
+  {{with .User}}<nav>
+    <span class="muted">{{.Username}} &middot; {{.Role}}</span>
+    {{if $.Can.UserAdmin}}<a href="/users">Users</a>{{end}}
+    {{if $.Can.UI}}<button onclick="document.getElementById('password-dialog').showModal()">Change password</button>{{end}}
+    <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{$.CSRF}}"><button>Log out</button></form>
+  </nav>{{end}}
+</header>
+<main>
+{{with .Notice}}<p class="notice">{{.}}</p>{{end}}
+{{with .Error}}<p class="error">{{.}}</p>{{end}}
+{{if .Can.UI}}
+{{/* смена своего пароля доступна любой роли, которую пускают в интерфейс */}}
+<dialog id="password-dialog"{{if eq .Dialog "password"}} open{{end}}>
+<h2>Change your password</h2>
+<form method="post" action="/password" class="stack">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <label for="current-password">Current password</label>
+  <input id="current-password" name="current" type="password" required autocomplete="current-password">
+  <label for="new-password">New password</label>
+  <input id="new-password" name="password" type="password" required autocomplete="new-password">
+  <label for="confirm-password">Repeat new password</label>
+  <input id="confirm-password" name="confirm" type="password" required autocomplete="new-password">
+  <p class="muted">Changing the password ends all your sessions: you will be asked to log in again.</p>
+  <p><button>Change password</button> <button formmethod="dialog" formnovalidate>Cancel</button></p>
+</form>
+</dialog>
+{{end}}
+{{template "content" .}}
+</main>
+</body>
+</html>{{end}}

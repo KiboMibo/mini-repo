@@ -1,0 +1,103 @@
+{
+  "skill": "coding-test",
+  "status": "FAIL",
+  "date": "2026-08-07",
+  "branch": "test/R5-tests",
+  "scope": {
+    "source": "plan:docs/plans/2026-08-06-app-artifactory.md#R5-test",
+    "base_ref": "9dfd06827efc229ff1ff83dbf9bc0b77d59f7316",
+    "files": [
+      "internal/store/store.go",
+      "internal/files/files.go",
+      "internal/api/api.go",
+      "internal/web/web.go",
+      "internal/web/templates/app.html"
+    ],
+    "owned_test_files": [
+      "internal/integration/r5_helpers_test.go",
+      "internal/integration/r5_rename_test.go",
+      "internal/integration/r5_delete_test.go",
+      "internal/integration/r5_guard_test.go"
+    ]
+  },
+  "tests": {
+    "added": 25,
+    "added_cases_with_subtests": 73,
+    "kind": "integration (app.New + httptest)",
+    "run_command": "go test ./...",
+    "baseline": { "passed": 8, "failed": 0, "unit": "packages", "note": "все пакеты ok до начала работы" },
+    "final": { "passed": 70, "failed": 3, "unit": "wave-5 cases", "packages_failed": ["apprepo/internal/integration"] },
+    "failing": [
+      "internal/integration › TestDeleteAppNamedLikeTheDatabaseFile/apprepo.db",
+      "internal/integration › TestDeleteAppNamedLikeTheDatabaseFile/apprepo.db-wal"
+    ],
+    "flaky": [],
+    "known_defect_marked": [],
+    "race_detector": { "run": true, "scope": "TestConcurrent*, TestRenameWhileUpload*", "data_races": 0 }
+  },
+  "coverage": {
+    "changed_lines_pct": 82.5,
+    "threshold": 80,
+    "threshold_met": true,
+    "changed_lines": 251,
+    "covered_lines": 207,
+    "repo_pct": 78.2,
+    "per_file": {
+      "internal/store/store.go": 100.0,
+      "internal/files/files.go": 95.0,
+      "internal/api/api.go": 79.6,
+      "internal/web/web.go": 76.4
+    },
+    "uncovered_reason": "все непокрытые изменённые строки — ветки 'internal error' (500) при отказе БД посреди запроса или отказе ФС при удалении; недостижимы без внедрения отказа в продакшн-код (тесты идут под root, поэтому трюк со снятием прав не работает; закрытие store перехватывается auth-middleware до входа в хендлер)"
+  },
+  "findings": [
+    {
+      "severity": "blocking",
+      "title": "Удаление приложения с именем файла БД сносит саму базу данных",
+      "file": "internal/files/files.go",
+      "line": 174,
+      "also_at": ["internal/api/api.go:345", "internal/web/web.go:509"],
+      "impact": "files.RemoveApp делает os.RemoveAll по {data-dir}/{name} без проверки, что там каталог приложения. naming.ValidateAppName пропускает точку и дефис, а data-dir по умолчанию содержит саму БД, поэтому приложение с именем apprepo.db (или apprepo.db-wal/-shm) можно создать и удалить: DELETE /api/apps/apprepo.db отвечает 204 и отвязывает живой файл БД. Процесс продолжает работать на открытом inode, потеря обнаруживается только при рестарте — исчезают все пользователи, сессии, приложения и версии. Тот же путь доступен из UI обычной учёткой.",
+      "suggestion": "В RemoveApp перед os.RemoveAll отказывать, если путь существует и не является каталогом (os.Lstat + !fi.IsDir()) — соседний RenameApp именно так и защищается (files.go:150-153). Дополнительно: поднять проверку выше store.DeleteApp, чтобы строка не удалялась перед отказом, и/или запретить имена, совпадающие с содержимым data-dir, ещё в POST /api/apps.",
+      "test": "internal/integration/r5_guard_test.go › TestDeleteAppNamedLikeTheDatabaseFile",
+      "fix_verified": "на копии репозитория одна проверка в RemoveApp делает все 8 пакетов зелёными без правок в тестах"
+    },
+    {
+      "severity": "important",
+      "title": "Переименование во время стриминга загрузки оставляет строку без файла",
+      "file": "internal/api/api.go",
+      "line": 501,
+      "impact": "putVersion держит снимок a.Name с начала запроса; если переименование проходит, пока files.Save читает тело, Save пересоздаёт каталог под старым именем и публикует файл туда, а строка версии остаётся у приложения с новым именем. Итог: висячая строка (GET /download/{new}/{version} → 500) и осиротевший каталог. Воспроизводится детерминированно 3/3.",
+      "suggestion": "Отдельной задачей вне волны 5: перечитывать имя приложения по a.ID после Save и до CreateVersion (с переносом файла), либо блокировка по app_id — разделяемая на загрузку, эксклюзивная на переименование.",
+      "test": "internal/integration/r5_guard_test.go › TestRenameWhileUploadIsStreamingObserved (проходит: зафиксировано как наблюдение по постановке задачи и отчётам T12-T14, где гонка отмечена как известная шероховатость)",
+      "reported_as": "observation"
+    },
+    {
+      "severity": "note",
+      "title": "Пустой каталог приложения остаётся после удаления последней версии",
+      "file": "internal/files/files.go",
+      "line": 182,
+      "impact": "files.Remove подчищает опустевший каталог версии, RemoveVersion каталог приложения не подчищает. Инвариант не нарушен, приложение живо; раскладка на диске после удаления последней версии отличается от раскладки до первой загрузки.",
+      "suggestion": "Ничего не делать либо унифицировать при следующем касании файла.",
+      "test": "internal/integration/r5_delete_test.go › TestDeleteLastVersionLeavesAppAlive (проходит)"
+    }
+  ],
+  "sensitivity_check": {
+    "spot_check": { "tests_checked": 9, "detected_defect": 9 },
+    "not_overspecified": { "checked": true, "green_after_fix": true },
+    "mutation": { "run": false, "reason": "go-mutesting в проекте не настроен, ставить ради одного прогона не стал" },
+    "production_code_restored": true
+  },
+  "assumptions": [
+    "Падающие тесты оставлены красными, а не помечены skip: общего CI, блокирующего соседние задачи, нет.",
+    "Гонка переименование+загрузка оформлена как наблюдение (тест проходит) по постановке задачи; на статус это не влияет.",
+    "Для гонки удаление+скачивание приемлемыми считались 200/404/500 без паники, обрыва соединения и недочитанного тела; наблюдались 200 и 404.",
+    "Инвариант 'нет строк без файлов' проверяется как требование; обратное 'нет файлов без строк' — как наблюдение, поскольку авторы волны сознательно предпочли осиротевший каталог висячей строке.",
+    "Пустой каталог приложения после удаления последней версии признан допустимым.",
+    "Недобранные до 100% изменённые строки — только 500-ветки; тестами-пустышками не добирались.",
+    "Имя приложения apprepo.db считается достижимым в проде (POST /api/apps его принимает, дефолтная конфигурация кладёт БД в data-dir); при вынесенной через APPREPO_DB базе тест сам себя скипает."
+  ],
+  "broken_before_work": [],
+  "report_md": "docs/plans/reviews/app-artifactory-R5-test.md",
+  "next_action": "Завести задачу F<N> на находку 1 (проверка типа пути в files.RemoveApp + пересмотр порядка store.DeleteApp/RemoveApp); следующую волну не начинать. Находку 2 вынести в отдельную задачу вне волны 5."
+}
