@@ -23,6 +23,7 @@ package web_test
 import (
 	"math"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -301,5 +302,69 @@ func TestDialogFitsNarrowViewport(t *testing.T) {
 		evalRem(t, "dialog{max-width}", maxRaw, 240); a != b {
 		t.Errorf("dialog{max-width}=%q растёт вместе с экраном (%grem на 120rem, "+
 			"%grem на 240rem): потолка нет, длинный текст растянет модалку", maxRaw, a, b)
+	}
+}
+
+// TestTablesAreWrappedForScrolling: каждая таблица проекта лежит в .scroll-x с
+// доступным именем. Проверяется по всем шаблонам разом, а не по списку страниц:
+// четвёртая таблица попадёт под проверку сама, а забыть обёртку легко —
+// последствие же неочевидное (возвращается переполнение страницы, вместе с ним
+// уезжает за экран модалка, F26/Н1).
+func TestTablesAreWrappedForScrolling(t *testing.T) {
+	files, err := filepath.Glob("templates/*.html")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("glob templates: %v (найдено %d)", err, len(files))
+	}
+	// Обёртка стоит вплотную к таблице — так её написал F26 во всех трёх местах.
+	wrapped := regexp.MustCompile(`(?s)<div class="scroll-x"([^>]*)>\s*<table`)
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		html := string(b)
+		tables := strings.Count(html, "<table")
+		found := wrapped.FindAllStringSubmatch(html, -1)
+		if tables != len(found) {
+			t.Errorf("%s: таблиц %d, обёрнутых в .scroll-x — %d: без обёртки "+
+				"вернётся горизонтальная прокрутка страницы", f, tables, len(found))
+		}
+		for _, m := range found {
+			// Область в обходе табом обязана иметь имя, иначе это молчаливая
+			// остановка фокуса.
+			if !strings.Contains(m[1], `tabindex="0"`) {
+				t.Errorf("%s: у .scroll-x нет tabindex=\"0\" — до прокрутки не "+
+					"добраться с клавиатуры; атрибуты:%s", f, m[1])
+			}
+			if !regexp.MustCompile(`aria-label="[^"]+"`).MatchString(m[1]) {
+				t.Errorf("%s: у .scroll-x нет непустого aria-label; атрибуты:%s", f, m[1])
+			}
+		}
+	}
+}
+
+// TestScrollWrapperCSS: прокрутка включена на обёртке, и вертикальный интервал
+// живёт там же. margin на table сложился бы с margin обёртки — overflow создаёт
+// BFC, и интервалы перестают схлопываться (F26).
+func TestScrollWrapperCSS(t *testing.T) {
+	css := layoutCSS(t)
+
+	scroll := declOf(t, css, ".scroll-x")
+	if got := propOf(t, scroll, "overflow-x"); got != "auto" {
+		t.Errorf(".scroll-x{overflow-x} = %q, want auto: без прокрутки на обёртке "+
+			"широкая таблица снова растянет страницу", got)
+	}
+	if !strings.Contains(scroll, "margin:") {
+		t.Errorf(".scroll-x без margin — вертикальный интервал таблицы потерян; правило: {%s}", scroll)
+	}
+	if table := declOf(t, css, "table"); strings.Contains(table, "margin") {
+		t.Errorf("table{margin} вернулся: сложится с margin обёртки (overflow "+
+			"создаёт BFC, интервалы не схлопываются); правило: {%s}", table)
+	}
+
+	// Логотип и nav вместе не сжимаются ниже 331px — без переноса шапка
+	// распирает страницу на 320px и кнопка Log out обрезается.
+	if got := propOf(t, declOf(t, css, "header"), "flex-wrap"); got != "wrap" {
+		t.Errorf("header{flex-wrap} = %q, want wrap", got)
 	}
 }
