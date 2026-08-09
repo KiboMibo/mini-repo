@@ -159,6 +159,12 @@ func TestBackArrowBaselineAndTapTarget(t *testing.T) {
 		t.Fatalf(".page-head h1 обзавёлся своим font-size — поправь h1FontSizeRem "+
 			"в тесте, высота строки стрелки считается от него; правило: {%s}", h1)
 	}
+	// Верх стрелки привязан к верху контейнера. Без top она встаёт на своё
+	// статическое место во флексе — рядом, но уже не по строке заголовка.
+	if got := propOf(t, declOf(t, css, ".back"), "top"); got != "0" {
+		t.Errorf(".back{top} = %q, want 0", got)
+	}
+
 	lh := propOf(t, h1, "line-height")
 	factor, err := strconv.ParseFloat(lh, 64)
 	if err != nil {
