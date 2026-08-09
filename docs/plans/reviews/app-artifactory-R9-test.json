@@ -1,0 +1,138 @@
+{
+  "skill": "coding-test",
+  "status": "FAIL",
+  "date": "2026-08-09",
+  "scope": {
+    "source": "task:R9-test (пост-плановая волна 9, брифа в плане нет)",
+    "basis": "git diff неинформативен: в репозитории один коммит 63482f3, правки волны 9 уже в нём; скоуп взят из формулировки задачи",
+    "files": [
+      "internal/web/templates/layout.html",
+      "internal/web/templates/app.html",
+      "internal/web/templates/users.html",
+      "internal/web/web_t26_test.go",
+      "internal/integration/r8_backarrow_test.go"
+    ],
+    "owned": [
+      "internal/web/web_r9_layout_test.go",
+      "internal/web/web_t26_test.go",
+      "internal/integration/r8_backarrow_test.go",
+      "docs/plans/reviews/app-artifactory-R9-test.md",
+      "docs/plans/reviews/app-artifactory-R9-test.json"
+    ]
+  },
+  "main_question": {
+    "question": "Не ослаблены ли два assert'а, подстроенные под новый символ автором правок шаблонов",
+    "verdicts": [
+      {
+        "assert": "internal/web/web_t26_test.go:39 — aria-label=\"Back to applications\">&lt;</a>",
+        "verdict": "НЕ ослаблен, строже прежнего",
+        "evidence": "мутации M1 (стрелка удалена), M2 (глиф обратно на &larr;), M3 (href сломан), M4 (удалён aria-label), M5 (ссылка → кнопка history.back), M6 (глиф пустой) — все КРАСНЫЕ; прежний &larr; искался где угодно на странице, новый привязан к элементу через aria-label",
+        "side_defect": "переспецифицирован: фиксирует порядок атрибутов, мутация M7 (перестановка title/aria-label, поведение то же) даёт ложное падение с вводящим в заблуждение сообщением — исправлено"
+      },
+      {
+        "assert": "internal/integration/r8_backarrow_test.go:32 — >&lt;</a>",
+        "verdict": "ОСЛАБЛЕН: чувствительность к прямым поломкам сохранена, но ассерт доказуемо ложно-положителен",
+        "evidence": "мутации M1/M2/M5/M6 КРАСНЫЕ. Но пробник на живом сервере: версия с ?filename=%3C (имя \"<\" проходит naming.ValidateFilename) даёт на странице <a href=\"/download/probe/1.0.0\">&lt;</a>, и при глифе стрелки, замененном на &larr;, ассерт остаётся ЗЕЛЁНЫМ — то есть зеленеет от чужого якоря даже при удалённой стрелке. Прежний &larr; был отвязан так же, но взяться на странице не мог ниоткуда, а >&lt;</a> берётся из пользовательских данных",
+        "side_defect": "исправлено: глиф и атрибуты берутся из одного якоря, найденного по class=\"back\" + href=\"/\""
+      },
+      {
+        "assert": "инвариант «стрелка — обычная ссылка, а не JS»",
+        "verdict": "покрыт, волной 9 не ослаблен",
+        "evidence": "оба теста ищут history.back/history.go; мутация M5 (ссылка → <button onclick=\"history.back()\">) ловится обоими по трём ассертам сразу. Добавлена явная проверка onclick на самом элементе — прежняя искала подстроку по всему телу"
+      }
+    ]
+  },
+  "tests": {
+    "added": 2,
+    "modified": 2,
+    "added_files": ["internal/web/web_r9_layout_test.go"],
+    "modified_files": [
+      "internal/web/web_t26_test.go",
+      "internal/integration/r8_backarrow_test.go"
+    ],
+    "run_command": "go test -short ./...",
+    "baseline": { "passed": 12, "failed": 0, "unit": "пакеты" },
+    "final": { "passed": 11, "failed": 1, "unit": "пакеты" },
+    "failing": [
+      "internal/web/web_r9_layout_test.go › TestDialogFitsNarrowViewport"
+    ],
+    "flaky": [],
+    "known_defect_marked": [],
+    "mutation_runs": 11,
+    "notes": "go build и go vet чисты. Изменённые и новые тесты прогнаны по 3 раза — стабильны. Мутационные прогоны M1–M7, N3bis–N10 плюс пробник ложной положительности; после каждого шаблоны откатывались, git status по internal/web/templates/* пуст. Инструментального mutation-тестирования нет и не ставилось — решение команды."
+  },
+  "coverage": {
+    "applicable": false,
+    "reason": "волна 9 не изменила ни строки Go — только HTML и CSS; инструментального покрытия у них нет, порог 80% не применяется",
+    "coverage_by_change": {
+      "глиф &lt; в app.html и users.html": "web_t26_test.go › TestBackArrowOnPagesBelowRoot, r8_backarrow_test.go › TestBackArrowOnPagesBelowRoot",
+      "main{padding:0 1rem 0 2.6rem}": "web_r9_layout_test.go › TestBackArrowOffsetsAgree",
+      ".page-head{margin-left:-1.6rem}": "web_r9_layout_test.go › TestBackArrowOffsetsAgree",
+      ".back{width:.8rem}": "web_r9_layout_test.go › TestBackArrowOffsetsAgree",
+      "th:first-child,td:first-child{padding-left:0}": "web_r9_layout_test.go › TestBackArrowOffsetsAgree",
+      "dialog{max-width:min(34rem,calc(100vw - 2rem))}": "web_r9_layout_test.go › TestDialogFitsNarrowViewport (красный)",
+      "dialog{box-sizing:border-box}": "web_r9_layout_test.go › TestDialogFitsNarrowViewport",
+      ".back{text-align:center}": "НЕ ПОКРЫТО — чисто визуальное свойство без арифметических связей; тест был бы пересказом строки CSS"
+    }
+  },
+  "findings": [
+    {
+      "severity": "important",
+      "title": "dialog{min-width:20rem} обесценивает добавленный волной 9 max-width на узких экранах",
+      "file": "internal/web/templates/layout.html",
+      "line": 40,
+      "impact": "По CSS 2.1 §10.4 min-width сильнее max-width. На экране 320 CSS-пикселей (20rem — iPhone SE, столько же даёт двукратный зум в окне 640px) max-width:min(34rem,calc(100vw - 2rem)) даёт 18rem, но min-width:20rem перебивает это: поля у краёв, ради которого calc(100vw - 2rem) и добавлялся, нет вовсе, а на экране уже 20rem модалка вылезает за край с горизонтальной прокруткой. Потолок 34rem при этом работает — сломана только нижняя половина замысла.",
+      "suggestion": "min-width:min(20rem,calc(100vw - 2rem)) — тем же приёмом, что и max-width. Гипотеза проверена мутацией N8bis: тест зеленеет, остальные тесты пакета не краснеют.",
+      "test": "internal/web/web_r9_layout_test.go › TestDialogFitsNarrowViewport"
+    },
+    {
+      "severity": "important",
+      "title": "Ассерт >&lt;</a> в интеграционном тесте был ложно-положительным",
+      "file": "internal/integration/r8_backarrow_test.go",
+      "line": 32,
+      "impact": "Ассерт не привязан к стрелке: он ищет любой якорь с текстом \"<\". Версия с именем файла \"<\" (проходит naming.ValidateFilename) даёт такой якорь в ссылке скачивания, и тест остаётся зелёным даже при удалённой из шаблона стрелке. Доказано пробником на живом сервере.",
+      "suggestion": "Исправлено мной (файл мой): глиф и атрибуты берутся из одного якоря, найденного по class=\"back\" + href=\"/\".",
+      "fixed": true
+    },
+    {
+      "severity": "note",
+      "title": "Ассерт в web-тесте фиксировал порядок атрибутов",
+      "file": "internal/web/web_t26_test.go",
+      "line": 39,
+      "impact": "Перестановка title и aria-label — правка, не меняющая поведения, — роняла тест (мутация M7) с сообщением «стрелка не нарисована символом <», хотя нарисована. Тест наказывал за безобидную правку разметки и врал в логе CI о причине.",
+      "suggestion": "Исправлено мной: разбор атрибутов якоря вместо подстроки, сообщения называют настоящую причину.",
+      "fixed": true
+    },
+    {
+      "severity": "note",
+      "title": "CSS волны 9 не был покрыт ничем",
+      "file": "internal/web/templates/layout.html",
+      "line": 14,
+      "impact": "Первый пункт области проверки (отступы main/.page-head/.back и первая колонка таблицы) не стерёг ни один тест: три связанных числа держались на комментариях рядом с правилами. Поменяв ширину стрелки и забыв два остальных числа, получаешь молчаливый съезд заголовка относительно таблицы — ровно тот дефект, который волна 9 и чинила.",
+      "suggestion": "Закрыто новым TestBackArrowOffsetsAgree: проверяется арифметика связи, конкретные значения не диктуются. Визуальная приёмка — за R9-qa.",
+      "fixed": true
+    },
+    {
+      "severity": "note",
+      "title": "Интеграционный тест не замечал потери aria-label у стрелки",
+      "file": "internal/integration/r8_backarrow_test.go",
+      "line": 32,
+      "impact": "Мутация M4 (удалён aria-label) переживалась интеграционным тестом молча. Для стрелки, нарисованной символом \"<\", подпись — единственное, что несёт назначение ссылки экранному диктору: глиф \"<\" не читается никак.",
+      "suggestion": "Проверка добавлена в оба слоя.",
+      "fixed": true
+    }
+  ],
+  "assumptions": [
+    "Ассерты, подстроенные автором правок, переписаны, а не только описаны: тестовые файлы — моя территория, а находка «ассерт ложно-положителен» без исправления оставила бы в репозитории ровно ту дыру, о которой отчёт предупреждает. Логика проверок сверх прежнего контракта не расширена.",
+    "Красный тест оставлен красным, без t.Skip и без ослабления: находка 1 — настоящий дефект в изменённой волной 9 строке, её место в CI. Общий CI это не блокирует, соседи по волне пишут в свои файлы независимо.",
+    "Порог 80% по изменённым строкам не применялся: изменённых строк Go в волне нет, натягивать процент на HTML нечем.",
+    "Узким экраном принято 320 CSS-пикселей (20rem): числа в задаче нет, это общепринятая нижняя граница мобильной вёрстки и то же, что двукратный зум в окне 640px. Переиграть — константа narrowRem в TestDialogFitsNarrowViewport.",
+    ".back{text-align:center} намеренно не покрыто: свойство ни с чем не связано арифметически, тест был бы пересказом строки CSS.",
+    "Тест вёрстки читает templates/layout.html с диска, а не через embed — конвенция пакета (так же web_f22_test.go)."
+  ],
+  "boundaries": {
+    "production_untouched": true,
+    "templates_untouched": true,
+    "note": "Все временные мутации откатывались через git checkout -- в trap/finally; итоговый git status по internal/web/templates/* пуст. docs/plans/state/app-artifactory-status.md в дереве изменён — это доска командира, не трогалась."
+  }
+}

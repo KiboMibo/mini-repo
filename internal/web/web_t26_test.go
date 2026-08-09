@@ -16,9 +16,24 @@ import (
 	"apprepo/internal/platform"
 )
 
-// backLink — разметка стрелки; по ней тесты отличают её от ссылки «apprepo» в
-// шапке, которая тоже ведёт на "/" и на корневой странице остаётся.
-const backLink = `<a class="back" href="/"`
+// anchorRe разбирает якоря на атрибуты и текст. Через него ищется стрелка:
+// класс, адрес и глиф обязаны принадлежать ОДНОМУ элементу, иначе ассерт
+// доказывает не то, что заявляет (R9-test). Порядок атрибутов внутри тега при
+// этом не фиксируется: их перестановка поведения не меняет и падением быть не
+// должна.
+var anchorRe = regexp.MustCompile(`(?s)<a\b([^>]*)>(.*?)</a>`)
+
+// backAnchor возвращает атрибуты и текст стрелки «назад». Класс И адрес вместе
+// отличают её от ссылки «apprepo» в шапке, которая тоже ведёт на "/" и есть на
+// каждой странице, включая корневую.
+func backAnchor(body string) (attrs, text string, ok bool) {
+	for _, m := range anchorRe.FindAllStringSubmatch(body, -1) {
+		if strings.Contains(m[1], `class="back"`) && strings.Contains(m[1], `href="/"`) {
+			return m[1], m[2], true
+		}
+	}
+	return "", "", false
+}
 
 // TestBackArrowOnPagesBelowRoot: стрелка есть там, где заголовок не корневой, и
 // это обычная ссылка на "/" — без JS и без history.back().
@@ -33,11 +48,19 @@ func TestBackArrowOnPagesBelowRoot(t *testing.T) {
 			t.Fatalf("GET %s: code = %d", page, rec.Code)
 		}
 		body := rec.Body.String()
-		if !strings.Contains(body, backLink) {
-			t.Errorf("на %s нет стрелки назад (%s)", page, backLink)
-		}
-		if !strings.Contains(body, `aria-label="Back to applications">&lt;</a>`) {
-			t.Errorf("на %s стрелка не нарисована символом <", page)
+		attrs, text, ok := backAnchor(body)
+		switch {
+		case !ok:
+			t.Errorf(`на %s нет стрелки назад (якоря с class="back" и href="/")`, page)
+		default:
+			if text != "&lt;" {
+				t.Errorf("на %s глиф стрелки = %q, want %q", page, text, "&lt;")
+			}
+			// Глиф "<" экранному диктору ничего не говорит: назначение
+			// ссылки несёт только подпись.
+			if !strings.Contains(attrs, `aria-label="Back to applications"`) {
+				t.Errorf("на %s у стрелки нет aria-label; атрибуты: %s", page, attrs)
+			}
 		}
 		// Никакой истории браузера: ссылка работает без JS и в новой вкладке.
 		for _, js := range []string{"history.back", "history.go"} {
@@ -47,7 +70,7 @@ func TestBackArrowOnPagesBelowRoot(t *testing.T) {
 		}
 	}
 	// Корневой список — верхний раздел, возвращаться некуда.
-	if body := e.do(t, "GET", "/", "", nil, false).Body.String(); strings.Contains(body, backLink) {
+	if _, _, ok := backAnchor(e.do(t, "GET", "/", "", nil, false).Body.String()); ok {
 		t.Error("на корневой странице есть стрелка назад")
 	}
 }

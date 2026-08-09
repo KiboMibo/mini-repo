@@ -27,17 +27,30 @@ form.stack input{width:100%;max-width:24rem;box-sizing:border-box}
 input,select,button{font:inherit;padding:.35rem .5rem;border:1px solid #d1d5db;border-radius:4px}
 button{cursor:pointer;background:#1f2937;color:#fff;border:0}
 code{font-size:.85em}
-/* сдвиг влево ровно на ширину стрелки с зазором (.8rem + gap .8rem): заголовок
-   встаёт на левый край контента, стрелка уходит в поле слева */
-.page-head{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin-left:-1.6rem}
-.page-head h1{margin:0}
+/* Сдвиг влево ровно на ширину стрелки с зазором (.8rem + gap .8rem) и такой же
+   padding обратно: заголовок встаёт на левый край контента, а освободившееся
+   поле слева занимает стрелка. Место под неё держит именно padding, а не её
+   собственное место в потоке: .page-head переносит строки (длинное имя
+   приложения, узкий экран), и при переносе заголовок обязан остаться на том же
+   левом крае, что и первая колонка таблицы (R9-qa В2). */
+.page-head{position:relative;display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin-left:-1.6rem;padding-left:1.6rem}
+/* line-height фиксирован: от него считается высота строки стрелки */
+.page-head h1{margin:0;line-height:1.2;overflow-wrap:anywhere}
 /* Стрелка «назад» — обычная ссылка на раздел выше: работает без JS, в новой
-   вкладке и предсказуемее истории браузера. Ширина фиксирована: от неё считается
-   сдвиг .page-head, а ширина глифа зависела бы от шрифта. */
-.back{font-size:1.6rem;line-height:1;text-decoration:none;color:inherit;width:.8rem;text-align:center}
+   вкладке и предсказуемее истории браузера. Вне потока: её габарит не влияет на
+   раскладку, и она остаётся слева от заголовка при любом переносе. Ширина
+   фиксирована: от неё считается padding и сдвиг .page-head, а ширина глифа
+   зависела бы от шрифта. line-height равен строке заголовка (1.2 × 2rem) — так
+   глиф центрируется по первой строке h1 без подгонки top. */
+.back{position:absolute;left:0;top:0;font-size:1.6rem;line-height:2.4rem;text-decoration:none;color:inherit;width:.8rem;text-align:center}
+/* область нажатия шире глифа: вне потока это ничего не сдвигает, а попасть
+   пальцем в 12.8px трудно (WCAG 2.2 SC 2.5.8 — 24×24) */
+.back::before{content:"";position:absolute;inset:-.4rem}
 /* min-width держит короткие подтверждения читаемыми, max-width — не даёт
-   длинному тексту подсказки растянуть модалку во весь экран */
-dialog{border:1px solid #d1d5db;border-radius:6px;padding:1rem 1.2rem;min-width:20rem;max-width:min(34rem,calc(100vw - 2rem));box-sizing:border-box}
+   длинному тексту подсказки растянуть модалку во весь экран. Обе границы
+   считаются от ширины экрана: min-width сильнее max-width (CSS 2.1 §10.4),
+   поэтому голый min-width:20rem обесценил бы потолок на экране уже 22rem */
+dialog{border:1px solid #d1d5db;border-radius:6px;padding:1rem 1.2rem;min-width:min(20rem,calc(100vw - 2rem));max-width:min(34rem,calc(100vw - 2rem));box-sizing:border-box}
 progress{width:100%;max-width:24rem;vertical-align:middle}
 dialog::backdrop{background:rgba(0,0,0,.5)}
 </style>
