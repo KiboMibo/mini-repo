@@ -1,0 +1,122 @@
+{
+  "skill": "coding-test",
+  "status": "PASS_WITH_FINDINGS",
+  "round": 2,
+  "date": "2026-08-09",
+  "verifies": "docs/reports/F24-2026-08-09.md",
+  "round1_report": "docs/plans/reviews/app-artifactory-R9-test.md",
+  "scope": {
+    "files": ["internal/web/templates/layout.html"],
+    "owned": [
+      "internal/web/web_r9_layout_test.go",
+      "internal/web/web_t26_test.go",
+      "internal/integration/r8_backarrow_test.go",
+      "docs/plans/reviews/app-artifactory-R9-test-round2.md",
+      "docs/plans/reviews/app-artifactory-R9-test-round2.json"
+    ]
+  },
+  "verdicts": [
+    {
+      "test": "TestDialogFitsNarrowViewport",
+      "question": "позеленел от правки шаблона или перестал что-либо проверять",
+      "verdict": "от шаблона; чувствительность подтверждена",
+      "mutations": [
+        {"id": "D1", "change": "min-width обратно на голые 20rem", "result": "КРАСНЫЙ"},
+        {"id": "D2", "change": "min-width:min(20rem,100vw)", "result": "КРАСНЫЙ (на разборе: 100vw без calc не поддержан)"},
+        {"id": "D3", "change": "min-width:min(20rem,calc(100vw - 1rem)) — поле уже, чем у max-width", "result": "КРАСНЫЙ"},
+        {"id": "D4", "change": "снят потолок 34rem", "result": "КРАСНЫЙ"},
+        {"id": "D5", "change": "удалён box-sizing", "result": "КРАСНЫЙ"}
+      ]
+    },
+    {
+      "test": "TestBackArrowOffsetsAgree",
+      "question": "стережёт ли после смены механизма или зелёный по совпадению",
+      "verdict": "БЫЛ ЗЕЛЁНЫМ ПО СОВПАДЕНИЮ — переписан под новый механизм",
+      "evidence": "Мутация O1 (удаление .page-head{padding-left:1.6rem} — ровно дефект В2, который чинил F24) оставляла старую редакцию ЗЕЛЁНОЙ: она проверяла формулу margin-left == -(width + gap), а под новым механизмом gap к позиции заголовка отношения не имеет (стрелка вне потока), load-bearing число — padding-left, которого старая редакция не смотрела вовсе.",
+      "rewritten_invariants": [
+        ".page-head{position:relative} и .back{position:absolute;left:0;top:0} — сам механизм",
+        ".page-head{padding-left} == -.page-head{margin-left}",
+        ".back{width} <= .page-head{padding-left}",
+        "main{padding-left} >= main{padding-right} + вылет стрелки",
+        "th:first-child,td:first-child{padding-left} == 0",
+        ".page-head h1{overflow-wrap} == anywhere"
+      ],
+      "mutations": [
+        {"id": "O1", "change": "удалён .page-head{padding-left}", "result": "КРАСНЫЙ", "note": "старая редакция была ЗЕЛЁНОЙ"},
+        {"id": "O2", "change": "padding-left рассогласован с margin-left", "result": "КРАСНЫЙ"},
+        {"id": "O3", "change": "снят .page-head{position:relative}", "result": "КРАСНЫЙ"},
+        {"id": "O4", "change": "стрелка возвращена в поток", "result": "КРАСНЫЙ"},
+        {"id": "O5", "change": ".back{width} шире отведённого поля", "result": "КРАСНЫЙ"},
+        {"id": "O6", "change": "main{padding-left} не вмещает вылет", "result": "КРАСНЫЙ"},
+        {"id": "O7", "change": "overflow-wrap -> normal", "result": "КРАСНЫЙ"},
+        {"id": "O8", "change": "первой колонке вернули отступ", "result": "КРАСНЫЙ"},
+        {"id": "O9bis", "change": "сдвиг, padding и main{padding-left} изменены согласованно", "result": "ЗЕЛЁНЫЙ", "note": "проверка в обратную сторону"},
+        {"id": "O10", "change": "изменён gap", "result": "ЗЕЛЁНЫЙ", "note": "под новым механизмом gap на позицию заголовка не влияет"}
+      ]
+    },
+    {
+      "test": "TestBackArrowBaselineAndTapTarget",
+      "question": "покрытие новых свойств F24",
+      "verdict": "покрыты все три, не как пересказ CSS",
+      "mutations": [
+        {"id": "V1", "change": ".back{line-height:1}", "result": "КРАСНЫЙ"},
+        {"id": "V2", "change": "изменён h1{line-height}, стрелка не поправлена", "result": "КРАСНЫЙ"},
+        {"id": "V3", "change": "удалён .back::before", "result": "КРАСНЫЙ"},
+        {"id": "V4", "change": "inset сжат до -.1rem (16px, ниже минимума WCAG)", "result": "КРАСНЫЙ"},
+        {"id": "V5", "change": "снят position:absolute у псевдоэлемента", "result": "КРАСНЫЙ"},
+        {"id": "V6", "change": "h1{line-height} и .back{line-height} изменены вместе", "result": "ЗЕЛЁНЫЙ"},
+        {"id": "V7", "change": "удалён .back{top:0}", "result": "КРАСНЫЙ"}
+      ]
+    }
+  ],
+  "coverage_decisions": {
+    "covered": {
+      ".back{line-height} против .page-head h1{line-height}": "арифметическая связь заявлена комментарием (1.2 × 2rem), держится на двух числах в разных правилах, разъезд молчаливый — тот же класс дефекта, что и горизонтальный",
+      ".page-head h1{overflow-wrap:anywhere}": "закрыло измеренный дефект (64-символьное имя вылезало за край), удаляется одним движением, ломает раскладку а не косметику",
+      ".back::before{inset}": "покрыто как норматив доступности, а не как строка CSS: глиф .8rem = 12.8px вдвое меньше минимума WCAG 2.2 §2.5.8 (24px); тест проверяет результат width - 2*inset >= 1.5rem",
+      ".back{top}, .back{left}, .back{position}, .page-head{position}": "сам механизм: без них absolute-стрелка считает координаты от другого предка или возвращается в поток"
+    },
+    "not_covered": {
+      ".back{text-align:center}": "нет связи с другим числом и внешнего норматива — пересказ строки CSS",
+      ".back{font-size}": "то же",
+      ".back::before{content}": "то же"
+    }
+  },
+  "tests": {
+    "added": 1,
+    "rewritten": 1,
+    "run_command": "go test -count=1 -short ./...",
+    "final": { "passed": 12, "failed": 0, "unit": "пакеты" },
+    "failing": [],
+    "flaky": [],
+    "mutation_runs": 20,
+    "notes": "go build, go vet, gofmt -l — чисто. Тесты области прогнаны по 2 раза, стабильны. Откат мутаций побайтовый с проверкой sha256 до и после; предохранитель отказывается стартовать, если в файле нет маркеров F24."
+  },
+  "findings": [
+    {
+      "severity": "important",
+      "title": "Тест круга 1 пережил смену механизма, не заметив её",
+      "file": "internal/web/web_r9_layout_test.go",
+      "line": 70,
+      "impact": "Старая редакция TestBackArrowOffsetsAgree проверяла следствие (числа сошлись), а не механизм (кто держит отступ). После F24 формула осталась верной арифметически и ложной по смыслу: удаление padding-left — ровно тот дефект, который F24 чинил — оставляло тест зелёным.",
+      "suggestion": "Переписано под новый механизм; gap из формулы убран, padding-left и position проверяются явно.",
+      "fixed": true
+    },
+    {
+      "severity": "important",
+      "title": "Мутационный откат через git checkout уничтожил незакоммиченные правки F24",
+      "file": "internal/web/templates/layout.html",
+      "line": 1,
+      "impact": "Скрипт круга 1 откатывал шаблон через `git checkout --`. В круге 2 правки F24 не были закоммичены, и первый откат стёр их целиком (stash пуст, fsck пуст — файл не попадал в индекс). Работа F24 и замеры R9-qa оказались под ударом.",
+      "suggestion": "У себя: откат побайтовый (содержимое в память до правки, возврат в finally) + предохранитель по маркерам F24 + сверка sha256. Системно (решать не мне): незакоммиченные правки на общем дереве несовместимы с агентами, мутирующими файлы — либо исполнитель коммитит до запуска проверяющих, либо проверяющие идут в отдельные worktree.",
+      "fixed": true,
+      "note": "Шаблон восстановлен командой; я его не восстанавливал — продакшн-файл вне моих границ, и часть текста я знал только по отчёту F24."
+    }
+  ],
+  "assumptions": [
+    "h1FontSizeRem = 2.0 взято из умолчания браузера: font-size у h1 в CSS проекта не задан. Тест падает с прямым указанием, если .page-head h1 обзаведётся своим font-size.",
+    "Минимум зоны нажатия — 24 CSS-px (WCAG 2.2 §2.5.8, уровень AA). Проекту уровень соответствия не назначен, взят AA как общепринятый. Переиграть — константа minTargetRem.",
+    "evalRem понимает только формы, встречающиеся в проекте (Nrem, calc(100vw - Nrem), min(...)); прочее — красный тест с сообщением про синтаксис. Разборщик CSS-длин ради полноты не писался.",
+    "gap убран из проверок намеренно: под новым механизмом он к позиции заголовка отношения не имеет, и требовать его участия значило бы толкать к поломке (мутация O10)."
+  ]
+}
