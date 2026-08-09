@@ -9,6 +9,7 @@
 //	user password <username>            set a user's password
 //	user disable|enable <username>      block / unblock a user
 //	user delete <username> -yes         delete a user
+//	version                             print version and commit
 //
 // The user subcommands are the emergency door into an installation nobody can
 // log into any more: they talk to the database directly and need no session.
@@ -38,8 +39,22 @@ import (
 	"golang.org/x/term"
 )
 
+// version и commit зашиваются при релизной сборке через -ldflags -X
+// (scripts/dist.sh). Умолчания оставлены рабочими, чтобы обычная `make build`
+// без ldflags продолжала собираться и что-то осмысленное печатать.
+var (
+	version = "dev"
+	commit  = "none"
+)
+
 func main() {
 	args := os.Args[1:]
+	// Версия разбирается до всего остального: config.Load про этот флаг не
+	// знает и отверг бы его, а подкоманды ниже разбирают только args[0].
+	if len(args) > 0 && (args[0] == "version" || args[0] == "-version" || args[0] == "--version") {
+		fmt.Printf("apprepo %s (commit %s)\n", version, commit)
+		return
+	}
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "serve":
@@ -65,6 +80,7 @@ func usage() string {
        apprepo user disable <username> [flags]
        apprepo user enable <username> [flags]
        apprepo user delete <username> -yes [flags]
+       apprepo version
 
 roles (increasing privilege): %s
   -role may be omitted only for the very first user, who is made an admin.

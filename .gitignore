@@ -1,6 +1,9 @@
 # build output
 /apprepo
 
+# релизные сборки (make dist)
+/dist/
+
 # local databases and data
 *.db
 *.db-shm
