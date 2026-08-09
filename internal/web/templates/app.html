@@ -21,6 +21,8 @@
 {{with .App.Description}}<p>{{.}}</p>{{end}}
 
 {{if .Versions}}
+{{/* обёртка .scroll-x — см. комментарий к правилу в layout.html */}}
+<div class="scroll-x" tabindex="0" role="region" aria-label="Versions of {{.App.Name}}">
 <table>
 <tr><th>Version</th><th>Platform</th><th>File</th><th>Size, bytes</th><th>SHA-256</th><th>Uploaded</th><th></th></tr>
 {{range $row := .Versions}}
@@ -73,6 +75,7 @@
 </tr>
 {{end}}
 </table>
+</div>
 {{else}}<p class="muted">No versions yet.</p>{{end}}
 
 {{/* каждая кнопка и её модалка — под своим правом: чего роль не может, того

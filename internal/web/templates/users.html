@@ -24,6 +24,8 @@
   name — the new account gets new Basic credentials, so update them wherever they are
   used (CI).</p>
 {{end}}
+{{/* обёртка .scroll-x — см. комментарий к правилу в layout.html */}}
+<div class="scroll-x" tabindex="0" role="region" aria-label="Users">
 <table>
 <tr><th>User</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr>
 {{range $u := .Users}}
@@ -91,6 +93,7 @@
 </tr>
 {{end}}
 </table>
+</div>
 
 <p><button onclick="document.getElementById('new-user-dialog').showModal()">New user</button></p>
 {{/* при ошибке формы модалка рендерится сразу открытой (атрибут open,
