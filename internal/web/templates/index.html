@@ -2,6 +2,8 @@
 {{define "content"}}
 <h1>Applications</h1>
 {{if .Apps}}
+{{/* обёртка .scroll-x — см. комментарий к правилу в layout.html */}}
+<div class="scroll-x" tabindex="0" role="region" aria-label="Applications">
 <table>
 <tr><th>Name</th><th>Description</th><th>Latest</th><th>Versions</th></tr>
 {{range .Apps}}
@@ -13,6 +15,7 @@
 </tr>
 {{end}}
 </table>
+</div>
 {{else}}<p class="muted">No applications yet.</p>{{end}}
 {{/* кнопку и модалку роли без PermApp не видят вовсе: недоступное действие не
      рисуется, а не ловится потом на 403 */}}

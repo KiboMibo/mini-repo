@@ -6,7 +6,13 @@
 <title>{{block "title" .}}apprepo{{end}}</title>
 <style>
 body{font-family:system-ui,sans-serif;margin:0;color:#1f2937}
-header{display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;background:#1f2937;color:#fff}
+/* flex-wrap — не косметика: логотип и nav вместе не сжимаются уже 331px (ширина
+   их min-content: подписи кнопок не переносятся), поэтому на экране 320 кнопка
+   Log out обрезалась краем, а страница получала 10px горизонтальной прокрутки.
+   Она же оставалась последней причиной, по которой модалка центрировалась не по
+   видимой области (R9-qa Н1) уже после того, как таблицы убраны в .scroll-x.
+   На широком экране правило не срабатывает — шапка остаётся одной строкой. */
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;padding:.6rem 1rem;background:#1f2937;color:#fff}
 header a{color:#fff;text-decoration:none;font-weight:600}
 header form{margin:0}
 /* Левый отступ шире правого — в него выходит стрелка «назад» (.page-head),
@@ -21,7 +27,27 @@ header form{margin:0}
    main:has(.page-head)) там же стрелка встала бы на -9.6px и обрезалась. */
 main{max-width:60rem;margin:1.5rem auto;padding:0 1rem 0 2.6rem}
 main:not(:has(.page-head)){padding-left:1rem}
-table{border-collapse:collapse;width:100%;margin:1rem 0}
+/* Таблицы шире телефона (у версий их семь колонок) прокручиваются сами, а не
+   тянут за собой всю страницу. Дело не только в самой таблице: пока страница
+   шире экрана, dialog центрируется по всему прокручиваемому холсту, а не по
+   видимой области, и модалка верной ширины открывается за краем экрана
+   (R9-qa круг 2, Н1 и З3). Отступ переехал сюда с table намеренно: overflow
+   создаёт BFC, и оставленный на таблице margin перестал бы схлопываться с
+   отступом соседнего абзаца — вертикальные интервалы выросли бы вдвое.
+   В печать прокрутка не едет: там ширина бумаги, а не экрана, и обрезать
+   колонки нечем. Пара overflow-x:auto + overflow-y:visible невозможна (CSS
+   Overflow 3 §3: visible рядом с auto вычисляется в auto), поэтому в @media
+   print пишется overflow целиком.
+   В разметке у обёртки стоят tabindex="0" и role/aria-label, и это не
+   украшение: Safari не делает прокручиваемую область фокусируемой сам (Chrome
+   127+ и Firefox делают), и без tabindex до горизонтальной прокрутки таблицы
+   нельзя добраться с клавиатуры вовсе. Раз область попадает в обход табом, ей
+   нужно имя, иначе это молчаливая остановка фокуса — отсюда role="region" с
+   aria-label. Цена — одна лишняя остановка там, где прокручивать нечего
+   (широкий экран); недостижимая клавиатурой область дороже. */
+.scroll-x{overflow-x:auto;margin:1rem 0}
+@media print{.scroll-x{overflow:visible}}
+table{border-collapse:collapse;width:100%}
 th,td{text-align:left;padding:.4rem .6rem;border-bottom:1px solid #e5e7eb}
 /* первая колонка без левого отступа — её текст встаёт ровно под заголовком страницы */
 th:first-child,td:first-child{padding-left:0}
