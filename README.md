@@ -1,5 +1,56 @@
 # apprepo
 
+**Свой репозиторий бинарников: залил сборку — получил стабильную ссылку на скачивание.**
+
+[![Go](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macOS%20%7C%20windows-blue)
+![CGO](https://img.shields.io/badge/CGO-not%20required-brightgreen)
+[![Release](https://img.shields.io/github/v/release/KiboMibo/mini-repo?display_name=tag)](https://github.com/KiboMibo/mini-repo/releases)
+
+## Что это
+
+Место, куда складывают сборки своих приложений и откуда их забирают: веб-интерфейс
+и JSON API, версии по semver, проверка SHA-256 при загрузке, постоянная ссылка на
+`latest`, роли отдельно для людей и для CI. Один бинарник на Go, метаданные в
+SQLite, файлы на диске — ни Docker, ни внешней базы, ни CGO.
+
+## Быстрый старт
+
+```sh
+# 1. Взять архив под свою платформу и распаковать
+#    https://github.com/KiboMibo/mini-repo/releases/latest
+tar -xzf apprepo_*_linux_amd64.tar.gz && cd apprepo_*_linux_amd64
+
+# 2. Завести первого пользователя (он же admin) — пароль спросит интерактивно
+./apprepo user add alice -data-dir ./data
+
+# 3. Запустить и открыть http://localhost:8080
+./apprepo serve -data-dir ./data -addr :8080
+```
+
+Из исходников — `make build` (нужен Go ≥ 1.24). Целостность скачанного архива
+проверяется файлом `SHA256SUMS` из того же релиза: `sha256sum -c SHA256SUMS`
+(на macOS — `shasum -a 256 -c SHA256SUMS`). Установка «по-взрослому», с systemd и
+отдельным пользователем, — в разделе [Деплой (systemd)](#деплой-systemd).
+
+## Оглавление
+
+- [Что умеет](#что-умеет)
+- [Сборка и запуск](#сборка-и-запуск)
+- [Конфигурация](#конфигурация)
+- [Доступ](#доступ)
+- [Роли и права](#роли-и-права)
+- [Веб-UI](#веб-ui)
+- [Управление учётками из CLI](#управление-учётками-из-cli)
+- [Платформа версии](#платформа-версии)
+- [Многофайловые приложения (архивы)](#многофайловые-приложения-архивы)
+- [Примеры curl](#примеры-curl)
+- [Деплой (systemd)](#деплой-systemd)
+- [Обновление существующей установки](#обновление-существующей-установки)
+- [Разработка](#разработка)
+
+## Что умеет
+
 Репозиторий бинарников приложений: веб-UI и JSON API для заведения приложений,
 загрузки версий (semver) с проверкой SHA-256 и скачивания по стабильным ссылкам,
 включая `latest`. Версия — один файл любого содержания: одиночный бинарник или
@@ -26,7 +77,9 @@ make build          # -> ./apprepo
 
 Требования: Go ≥ 1.24 (только для сборки). CGO не нужен (SQLite — чистый Go,
 WASM-сборка через wazero), кросс-компиляция свободная:
-`GOOS=linux GOARCH=amd64 go build ./cmd/apprepo`.
+`GOOS=linux GOARCH=amd64 go build ./cmd/apprepo`. Готовые архивы под все пять
+поддерживаемых платформ собирает `make dist` (см. [Релизные
+сборки](#релизные-сборки)).
 
 **Сборка без доступа к golang.org/gitlab.com:** в `go.mod` стоят `replace`
 зависимостей `golang.org/x/*` на официальные зеркала `github.com/golang/*` —
@@ -750,3 +803,18 @@ apprepo user list -data-dir /opt/apps   # роли на месте
 make test                # go test ./...
 bash scripts/smoke.sh    # сквозной сценарий на временном каталоге
 ```
+
+### Релизные сборки
+
+```sh
+make dist                       # версия из `git describe`
+make dist VERSION=v1.0.0        # версия задана явно
+```
+
+Собирает пять платформ (`linux/amd64`, `linux/arm64`, `darwin/amd64`,
+`darwin/arm64`, `windows/amd64`) в `dist/`: `.tar.gz` для linux и macOS, `.zip`
+для windows, внутри — бинарник, `README.md` и `LICENSE`, если он есть. Рядом
+кладётся `SHA256SUMS`. Версия и коммит зашиваются через `-ldflags -X` и
+печатаются по `apprepo -version`; обычная `make build` собирается без них и
+показывает `dev`. Сам `dist/` в репозиторий не едет. Нужен `zip` в системе —
+всё остальное делает Go.
