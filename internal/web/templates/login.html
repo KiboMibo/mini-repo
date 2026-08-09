@@ -1,0 +1,15 @@
+{{define "title"}}Log in — apprepo{{end}}
+{{define "content"}}
+<h1>Log in</h1>
+<form method="post" action="/login" class="stack">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <input type="hidden" name="next" value="{{.Next}}">
+  <label for="username">Username</label>
+  <input id="username" name="username" required autofocus>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" required>
+  <p><button>Log in</button></p>
+</form>
+<p class="muted">Accounts with the <code>deployer</code> role have no access to
+  this interface: they use the API and direct download links.</p>
+{{end}}

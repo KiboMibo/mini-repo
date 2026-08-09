@@ -1,0 +1,17 @@
+# build output
+/apprepo
+
+# local databases and data
+*.db
+*.db-shm
+*.db-wal
+
+# локальный каталог данных из ручных прогонов (scripts/smoke.sh, отладка)
+/repo/
+
+# служебные каталоги инструментов (индексы, состояние сессий)
+/.omc/
+/.repowise/
+
+# macOS
+.DS_Store

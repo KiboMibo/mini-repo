@@ -1,0 +1,40 @@
+[Unit]
+Description=apprepo binary artifact repository
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=no
+User=apprepo
+Group=apprepo
+EnvironmentFile=/etc/apprepo/apprepo.env
+ExecStart=/usr/local/bin/apprepo serve
+Restart=on-failure
+RestartSec=2
+
+# Страховочный предел, а не рабочий: определение платформы в internal/platform
+# читает заголовок фиксированного размера и в память не упирается вовсе. Эти
+# строки нужны на случай будущей ошибки — промах любого нового ограничения
+# должен стоить рестарта сервиса, а не свопа и OOM-killer'а, который выбирает
+# жертву на всей машине. GOMEMLIMIT ниже MemoryMax, чтобы сборщик мусора
+# начинал стараться раньше, чем в дело вступает ядро. Заливки идут потоком на
+# диск и в RSS не превращаются, так что гигабайта хватает с запасом;
+# поднимаешь один — поднимай и второй.
+MemoryMax=1G
+Environment=GOMEMLIMIT=768MiB
+
+# Hardening
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+# Обязан совпадать с APPREPO_DATA_DIR из EnvironmentFile: переменные окружения
+# systemd в своих директивах не раскрывает, а ProtectSystem=strict делает ФС
+# read-only вне этого списка. Меняешь data-dir — правь обе строки + daemon-reload.
+# Каталог APPREPO_DB, если БД вынесена из data-dir, тоже обязан быть здесь:
+# несколько путей пишутся через пробел — ReadWritePaths=/data/repo/apps /data/repo/db
+ReadWritePaths=/opt/apps
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,117 @@
+{{define "title"}}Users — apprepo{{end}}
+{{define "content"}}
+<div class="page-head">
+{{/* та же стрелка, что и на странице приложения: ссылка на список приложений */}}
+<a class="back" href="/" title="Back to applications" aria-label="Back to applications">&lt;</a>
+<h1>Users</h1>
+</div>
+{{/* Пояснение к пометке — только когда такие учётки есть (пустая карта ложна):
+     в здоровой установке страница выглядит как раньше. Текст называет ровно
+     ту операцию, которая в интерфейсе есть: смены имени учётки нет. Фраза про
+     двоеточие показывается только при таких учётках: она про сломанную, а не
+     про неудобную (R6-qa круг 2). */}}
+{{if or .Legacy .Broken}}
+<p class="muted">Some accounts have a <strong>legacy name</strong> — a name from before
+  name validation (spaces, a colon, non-ASCII letters); the exact name is shown in quotes
+  next to it, because a trailing space is invisible otherwise. A name with spaces or
+  non-ASCII letters still works and can sign in, but it is not addressable by name from the
+  API or CLI.
+  {{if .Broken}}A name with a colon is worse and marked <strong>broken name</strong>: HTTP
+  Basic encodes <code>user:password</code>, so everything before the first colon is read as
+  the user name and such an account cannot sign in over Basic at all — with the
+  <code>deployer</code> role, which has no web UI either, it is dead; fix these first.{{end}}
+  There is no way to rename an account: delete it here and create it again under a valid
+  name — the new account gets new Basic credentials, so update them wherever they are
+  used (CI).</p>
+{{end}}
+<table>
+<tr><th>User</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr>
+{{range $u := .Users}}
+<tr>
+  <td>{{$u.Username}}{{if eq $u.ID $.User.ID}} <span class="muted">(you)</span>{{end}}
+    {{with index $.Legacy $u.ID}} <span class="badge" style="background:#b45309"
+      title="Not addressable by name from the API or CLI">legacy name {{.}}</span>{{end}}
+    {{with index $.Broken $u.ID}} <span class="badge" style="background:#b91c1c"
+      title="Cannot sign in over HTTP Basic at all: it encodes user:password"
+      >broken name {{.}}</span>{{end}}</td>
+  <td>
+    <form method="post" action="/users/{{$u.ID}}/role">
+      <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+      <select name="role" aria-label="Role of {{$u.Username}}">
+        {{range $.Roles}}<option value="{{.}}"{{if eq . $u.Role}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      <button>Set</button>
+    </form>
+  </td>
+  <td>
+    <form method="post" action="/users/{{$u.ID}}/disabled">
+      <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+      {{if $u.Disabled}}
+      <span class="badge" style="background:#b91c1c">blocked</span>
+      <input type="hidden" name="disabled" value="false"><button>Unblock</button>
+      {{else}}
+      active
+      <input type="hidden" name="disabled" value="true"><button>Block</button>
+      {{end}}
+    </form>
+  </td>
+  <td class="muted">{{$u.CreatedAt}}</td>
+  <td>
+    <button onclick="document.getElementById('pw-{{$u.ID}}').showModal()">Reset password</button>
+    {{if ne $u.ID $.User.ID}}
+    <button onclick="document.getElementById('del-user-{{$u.ID}}').showModal()">Delete</button>
+    {{end}}
+
+    <dialog id="pw-{{$u.ID}}">
+    <h2>Reset password of {{$u.Username}}</h2>
+    <form method="post" action="/users/{{$u.ID}}/password" class="stack">
+      <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+      <label for="pw-value-{{$u.ID}}">New password</label>
+      <input id="pw-value-{{$u.ID}}" name="password" type="password" required autocomplete="new-password">
+      <p class="muted">The user is logged out of every session.</p>
+      <p><button>Reset</button> <button formmethod="dialog" formnovalidate>Cancel</button></p>
+    </form>
+    </dialog>
+
+    {{if ne $u.ID $.User.ID}}
+    {{/* строгое подтверждение вводом имени — как у удаления приложения */}}
+    <dialog id="del-user-{{$u.ID}}">
+    <h2>Delete user</h2>
+    <p>This deletes <strong>{{$u.Username}}</strong> and all their sessions.
+      It cannot be undone.</p>
+    <form method="post" action="/users/{{$u.ID}}/delete" class="stack">
+      <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+      <label for="confirm-{{$u.ID}}">Type <code>{{$u.Username}}</code> to confirm</label>
+      <input id="confirm-{{$u.ID}}" name="confirm" required autocomplete="off">
+      <p><button>Delete user</button> <button formmethod="dialog" formnovalidate>Cancel</button></p>
+    </form>
+    </dialog>
+    {{end}}
+  </td>
+</tr>
+{{end}}
+</table>
+
+<p><button onclick="document.getElementById('new-user-dialog').showModal()">New user</button></p>
+{{/* при ошибке формы модалка рендерится сразу открытой (атрибут open,
+     не-модально), чтобы баннер ошибки в layout оставался видимым */}}
+<dialog id="new-user-dialog"{{if eq .Dialog "new-user"}} open{{end}}>
+<h2>New user</h2>
+<form method="post" action="/users" class="stack">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <label for="new-username">User name</label>
+  <input id="new-username" name="username" required autocomplete="off">
+  {{/* id не "new-password": он уже занят модалкой смены своего пароля в layout */}}
+  <label for="new-user-password">Password</label>
+  <input id="new-user-password" name="password" type="password" required autocomplete="new-password">
+  <label for="new-role">Role</label>
+  <select id="new-role" name="role">
+    {{range .Roles}}<option value="{{.}}">{{.}}</option>{{end}}
+  </select>
+  <p class="muted"><code>deployer</code> — API and direct links only;
+    <code>developer</code> — versions; <code>maintainer</code> — applications too;
+    <code>admin</code> — users too.</p>
+  <p><button>Create</button> <button formmethod="dialog" formnovalidate>Cancel</button></p>
+</form>
+</dialog>
+{{end}}

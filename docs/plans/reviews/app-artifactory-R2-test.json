@@ -1,0 +1,83 @@
+{
+  "skill": "coding-test",
+  "status": "PASS",
+  "date": "2026-08-06",
+  "scope": {
+    "source": "plan:docs/plans/2026-08-06-app-artifactory.md#R2-test",
+    "files": ["internal/store/store.go", "internal/store/schema.sql", "internal/files/files.go"]
+  },
+  "tests": {
+    "added": 15,
+    "run_command": "go test -count=1 ./internal/store/ ./internal/files/",
+    "baseline": { "passed": 6, "failed": 0 },
+    "final": { "passed": 21, "failed": 0 },
+    "failing": [],
+    "flaky": []
+  },
+  "coverage": {
+    "changed_lines_pct": 81.9,
+    "threshold": 80,
+    "threshold_met": true,
+    "base_ref": "develop",
+    "per_file": {
+      "internal/store/store.go": 81.2,
+      "internal/files/files.go": 84.6
+    },
+    "package_pct": { "internal/store": 85.2, "internal/files": 88.9 },
+    "notes": "непокрыто — только ветки ошибок диска/драйвера (fault-injection не оправдан)"
+  },
+  "findings": [
+    {
+      "severity": "note",
+      "title": "TOCTOU-гонка в files.Save: конкурентная запись одного пути молча перезаписывает",
+      "file": "internal/files/files.go",
+      "line": 58,
+      "impact": "Два конкурентных Save одного пути оба проходят Stat-проверку; последовательный повтор (критерий плана) отклоняется корректно, от дублей на уровне сервиса защищает UNIQUE в БД.",
+      "suggestion": "Оставить; при желании строгой гарантии — os.Link+Remove вместо Rename.",
+      "test": null
+    },
+    {
+      "severity": "note",
+      "title": "Prerelease старшего мажора становится latest (2.0.0-beta > 1.10.0)",
+      "file": "internal/store/store.go",
+      "line": 352,
+      "impact": "Корректный semver и не противоречит плану, но latest начнёт отдавать бету; поведение зафиксировано тестом как контрактное.",
+      "suggestion": "Осознать и оставить, либо решением человека исключать prerelease из авто-latest.",
+      "test": "TestStoreR2/prerelease_of_higher_major_wins_over_lower_release"
+    },
+    {
+      "severity": "note",
+      "title": "wrapExists детектит дубль по подстроке текста ошибки драйвера",
+      "file": "internal/store/store.go",
+      "line": 93,
+      "impact": "Смена драйвера/формата сообщения молча сломает ErrExists; с текущим драйвером работает.",
+      "suggestion": "При следующем касании — errors.As на тип ошибки драйвера (SQLITE_CONSTRAINT_UNIQUE).",
+      "test": null
+    },
+    {
+      "severity": "note",
+      "title": "parseTime глотает ошибку парсинга (повреждённая дата -> нулевое время)",
+      "file": "internal/store/store.go",
+      "line": 99,
+      "impact": "Для сессий безопасная сторона (нулевое время = просрочена), для CreatedAt косметика.",
+      "suggestion": "Оставить.",
+      "test": null
+    },
+    {
+      "severity": "note",
+      "title": "CreateVersion не валидирует формат sha256",
+      "file": "internal/store/store.go",
+      "line": 271,
+      "impact": "Стор примет любую строку; в реальном потоке хеш всегда считает files.Save.",
+      "suggestion": "Опционально проверка ^[0-9a-f]{64}$.",
+      "test": null
+    }
+  ],
+  "sensitivity_check": {
+    "spot_check": { "tests_checked": 8, "detected_defect": 8 },
+    "not_overspecified": { "checked": true, "green_after_fix": null, "reason": "падающих тестов нет, гипотез исправления не было" },
+    "mutation": { "run": false, "reason": "go-mutesting в проекте не настроен; ручные мутации — 8/8 пойманы" }
+  },
+  "report_md": "docs/plans/reviews/app-artifactory-R2-test.md",
+  "next_action": "Волна закрыта, F2 можно закрывать пустой; замечания — на решение человека, волну 3 не блокируют."
+}

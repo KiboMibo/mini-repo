@@ -1,0 +1,124 @@
+{
+  "skill": "coding-test",
+  "status": "FAIL",
+  "date": "2026-08-07",
+  "scope": {
+    "source": "plan:docs/plans/2026-08-06-app-artifactory.md#R6-test",
+    "files": [
+      "cmd/apprepo/main.go",
+      "internal/api/api.go",
+      "internal/api/users.go",
+      "internal/auth/auth.go",
+      "internal/auth/roles.go",
+      "internal/store/store.go",
+      "internal/store/schema.sql",
+      "internal/store/user_by_id.go",
+      "internal/web/web.go",
+      "internal/web/users.go",
+      "internal/web/templates/"
+    ],
+    "tests_owned": ["internal/integration/r6_*.go"],
+    "note": "Сквозные сценарии на собранном app.New + httptest. Табличные матрицы «роль × маршрут» внутри internal/api и internal/web не дублировались — они уже написаны T19/T20."
+  },
+  "tests": {
+    "added": 16,
+    "added_nodes": 113,
+    "files": [
+      "internal/integration/r6_helpers_test.go",
+      "internal/integration/r6_migration_test.go",
+      "internal/integration/r6_parity_test.go",
+      "internal/integration/r6_lifecycle_test.go",
+      "internal/integration/r6_lastadmin_test.go",
+      "internal/integration/r6_leaks_test.go",
+      "internal/integration/r6_cli_test.go"
+    ],
+    "run_command": "go test -count=1 ./...",
+    "baseline": { "passed": 449, "failed": 0 },
+    "final": { "passed": 559, "failed": 3 },
+    "failing": [
+      "internal/integration/r6_parity_test.go › TestUsernameHandlingConsistency/api_и_ui_одинаково_нормализуют_имя",
+      "internal/integration/r6_parity_test.go › TestUsernameHandlingConsistency/созданная_учётка_умеет_войти"
+    ],
+    "flaky": [],
+    "known_defect_marked": []
+  },
+  "coverage": {
+    "changed_lines_pct": 87.1,
+    "threshold": 80,
+    "threshold_met": true,
+    "repo_pct": 77.6,
+    "changed_lines_total": 843,
+    "basis": "go test -coverpkg=./... по всему модулю; профиль CLI снят отдельно инструментированным бинарником (go build -cover + GOCOVERDIR + go tool covdata textfmt) и слит максимумом по блокам — подкоманды apprepo user тестируются подпроцессом и в обычный -coverprofile не попадают. Без слияния число по волне — 72.4%, по cmd/apprepo/main.go — 22.7%.",
+    "per_file": {
+      "internal/api/api.go": 100.0,
+      "internal/auth/roles.go": 100.0,
+      "internal/auth/auth.go": 100.0,
+      "internal/store/user_by_id.go": 100.0,
+      "internal/web/web.go": 100.0,
+      "internal/web/users.go": 87.2,
+      "cmd/apprepo/main.go": 85.4,
+      "internal/api/users.go": 83.9,
+      "internal/store/store.go": 81.9
+    }
+  },
+  "findings": [
+    {
+      "severity": "important",
+      "title": "API не нормализует имя учётки, UI обрезает пробелы — одно имя заводит две учётки",
+      "file": "internal/api/users.go",
+      "line": 113,
+      "also": ["internal/web/users.go:129"],
+      "impact": "Имя \" ops \" через UI даёт учётку ops, через API — \" ops \". Обе существуют, в списке выглядят одинаково, адресуются по-разному: блокировка или смена роли попадёт только в одну. Тот же класс расхождения «одна операция — два интерфейса», который сводила F11.",
+      "suggestion": "Одна функция нормализации+валидации имени, вызываемая из api.createUser, web.createUser и cmd/apprepo.userAdd. Тест не фиксирует ни место функции, ни текст сообщения.",
+      "test": "TestUsernameHandlingConsistency/api_и_ui_одинаково_нормализуют_имя"
+    },
+    {
+      "severity": "important",
+      "title": "Имя учётки нигде не валидируется: ci:bot создаётся с 201, но войти по HTTP Basic ею нельзя",
+      "file": "internal/api/users.go",
+      "line": 113,
+      "also": ["internal/web/users.go:129", "internal/store/store.go:201", "cmd/apprepo/main.go:275"],
+      "impact": "HTTP Basic кодирует user:password, поэтому двоеточие в имени делает учётку неаутентифицируемой (Basic base64(\"ci:bot:pw\") читается как пользователь ci). Сервер отвечает 201 и не предупреждает. Для роли deployer, у которой нет доступа в UI, это учётка, мёртвая с рождения. Заодно проходят имена в 300 байт и различающиеся только регистром.",
+      "suggestion": "Отвергать двоеточие и управляющие символы, ограничить длину — там же, где нормализация из находки 1. Тест сформулирован «либо 400 на входе, либо созданная учётка работоспособна», исправление свободно выбрать вариант.",
+      "test": "TestUsernameHandlingConsistency/созданная_учётка_умеет_войти"
+    },
+    {
+      "severity": "note",
+      "title": "Ветка ErrLastAdmin при удалении учётки в UI недостижима через HTTP",
+      "file": "internal/web/users.go",
+      "line": 235,
+      "impact": "Защита последнего админа от удаления через HTTP держится на проверке самоудаления, а не на guardLastAdmin: удалять может только админ, а единственный путь к ErrLastAdmin — удаление себя, которое отсекается раньше как self_delete. Если запрет самоудаления когда-нибудь снимут, поведение изменится молча. Через CLI ветка достижима и покрыта.",
+      "suggestion": "Ничего не менять; знать при следующей правке этих обработчиков.",
+      "test": "TestLastAdminProtectedOverAPI/нельзя_удалить_себя, TestCLIAccountsVisibleOverHTTP/CLI_защищает_последнего_админа"
+    },
+    {
+      "severity": "note",
+      "title": "Заблокированный админ не считается активным — намеренно, но неочевидно",
+      "file": "internal/store/store.go",
+      "line": 240,
+      "impact": "CountAdmins фильтрует disabled=0, а guardLastAdmin не защищает заблокированного админа: его можно удалить, и он не мешает защите оставшегося. Поведение правильное и последовательное, но неочевидное — теперь зафиксировано тестом.",
+      "suggestion": "Оставить как есть.",
+      "test": "TestLastAdminProtectedOverUI/защита_держится_после_блокировки_второго_админа"
+    }
+  ],
+  "sensitivity_check": {
+    "spot_check": { "tests_checked": 11, "detected_defect": 11 },
+    "equivalent_mutants": [
+      "Отключение _pragma=foreign_keys(1): наблюдаемое поведение не меняется, потому что GetSession дополнительно джойнит users; осиротевшая строка sessions остаётся в БД, но снаружи не видна."
+    ],
+    "not_overspecified": {
+      "checked": true,
+      "green_after_fix": true,
+      "how": "На временной копии репозитория внесена нормализация и валидация имени в api.createUser и web.createUser; go test ./... (9 пакетов) зелёный без единой правки в тестах. Первая редакция подтеста про нормализацию была переспецифицирована и переписана по результату этой проверки."
+    },
+    "mutation": { "run": false, "reason": "go-mutesting в проекте не настроен; ставить ради одного прогона не стал" },
+    "production_code_clean": true
+  },
+  "verification": {
+    "stability": "полный набор прогнан 3 раза, включая -shuffle=on — результат идентичен",
+    "race": "go test -race по TestConcurrentDemotionKeepsAnAdmin и TestLastAdmin* — чисто",
+    "vet": "go vet ./... — чисто"
+  },
+  "report_md": "docs/plans/reviews/app-artifactory-R6-test.md",
+  "next_action": "Завести F12 на находки 1-2 (одна общая нормализация и валидация имени учётки для API, UI и CLI) — это ~20 строк и не трогает контракты. Блокирующих находок нет: миграция боевой БД, согласованность прав API↔UI, жизненный цикл учётки, гашение сессий, защита последнего админа (включая гонку), отсутствие утечек и связка CLI↔HTTP подтверждены зелёными тестами. Если F12 решат отложить — статус волны можно принять как PASS_WITH_FINDINGS, но два подтеста останутся красными до исправления."
+}

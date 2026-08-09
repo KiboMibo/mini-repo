@@ -1,0 +1,101 @@
+{
+  "skill": "coding-test",
+  "status": "FAIL",
+  "date": "2026-08-08",
+  "scope": {
+    "source": "plan:docs/plans/2026-08-06-app-artifactory.md#R8-test",
+    "basis": "git merge-base HEAD develop = 84998f5",
+    "files": [
+      "internal/platform/platform.go",
+      "internal/store/store.go",
+      "internal/api/api.go",
+      "internal/web/web.go",
+      "internal/app/app.go",
+      "internal/app/backfill.go",
+      "internal/web/templates/app.html",
+      "internal/web/templates/users.html",
+      "internal/web/templates/layout.html"
+    ],
+    "owned": ["internal/integration/**", "docs/plans/reviews/app-artifactory-R8-test.md"]
+  },
+  "tests": {
+    "added": 16,
+    "added_subtests": 51,
+    "also_extended": "internal/integration/r6_parity_test.go: +1 операция «проставить платформу версии» в таблице парности прав",
+    "run_command": "go test ./... -count=1",
+    "baseline": { "passed": 11, "failed": 0, "unit": "пакеты" },
+    "final": { "passed": 10, "failed": 1, "unit": "пакеты" },
+    "failing": [
+      "internal/integration/r8_binaries_test.go › TestPlatformMismatchParityAPIvsUI"
+    ],
+    "flaky": [],
+    "known_defect_marked": [],
+    "notes": "4 полных прогона пакета internal/integration, включая -shuffle=on и -short: результат стабилен. go vet чист, gofmt пуст, scripts/smoke.sh — SMOKE OK. Тяжёлые сценарии (go build) спрятаны за -short по конвенции проекта."
+  },
+  "coverage": {
+    "changed_lines_pct": 85.7,
+    "changed_lines": 342,
+    "covered_lines": 293,
+    "threshold": 80,
+    "threshold_met": true,
+    "by_file": {
+      "internal/app/app.go": 100.0,
+      "internal/platform/platform.go": 93.0,
+      "internal/store/store.go": 87.7,
+      "internal/api/api.go": 85.7,
+      "internal/app/backfill.go": 83.7,
+      "internal/web/web.go": 80.2
+    },
+    "uncovered_reason": "оставшиеся строки — ветки отказа инфраструктуры (сбой SQLite, нечитаемый файл в platform.Detect, неудача уборки при откате); недостижимы без подмены слоёв, перечислены в отчёте"
+  },
+  "findings": [
+    {
+      "severity": "blocking",
+      "title": "Форма UI молча принимает платформу, противоречащую содержимому файла",
+      "file": "internal/web/web.go",
+      "line": 583,
+      "impact": "Бинарник, собранный под linux/amd64, заливается через интерфейс с выбранной парой windows/amd64 и получает в репозитории чужую метку (303, версия создана). Тот же файл с той же меткой API отвергает 409 platform_mismatch (internal/api/api.go:732). Нарушен инвариант CLAUDE.md «класс кода ответа на одну и ту же ошибку обязан совпадать в API и UI»; класс проблемы тот же, что у F11. T25 выбрал отказ, T26 — переопределение (закреплено тестом internal/web/web_t26_test.go:226), F20 сверял парность только на архиве без платформы.",
+      "suggestion": "Свести к одному контракту на оба интерфейса. Вариант «отказ» (как формулировала задача волны): сверка с platform.Detect в web.saveUpload перед CreateVersion + rollbackFile, и переписать web_t26_test.go:226. Вариант «переопределение»: снять platform_mismatch из API и описать в docs/api.md. Оставлять как есть нельзя.",
+      "test": "internal/integration/r8_binaries_test.go › TestPlatformMismatchParityAPIvsUI"
+    },
+    {
+      "severity": "important",
+      "title": "Документация волны 8 не написана: docs/api.md, README.md, CLAUDE.md не знают о платформе",
+      "file": "docs/api.md",
+      "line": 1,
+      "impact": "grep -ci platform по docs/api.md, README.md и CLAUDE.md даёт 0. Не описаны маршрут PATCH /api/apps/{name}/versions/{version}, параметр ?platform=, поле platform в ответах и коды platform_required / platform_mismatch / invalid_platform; нет их и в таблице «маршрут → право». CLAUDE.md прямо требует синхронного обновления docs/api.md. Отдельно: требование платформы при заливке архива — ломающее изменение для существующих пайплайнов и форм, о котором README молчит; устарел инвариант о порядке полей формы (теперь csrf_token, version, sha256, platform_os, platform_arch, file).",
+      "suggestion": "Завести документационную задачу волны (или включить в F21). T26 вынес это в «точки внимания», задача не заведена.",
+      "test": null
+    },
+    {
+      "severity": "note",
+      "title": "Прогон -short не ловит находку 1",
+      "file": "internal/integration/r8_binaries_test.go",
+      "line": 129,
+      "impact": "Сценарии с настоящими бинарниками требуют go build и по конвенции проекта пропускаются в -short; вместе с ними пропускается падающий тест, и go test -short ./... зелёный при наличии дефекта. make test гоняет полный набор, поэтому штатная проверка защищает.",
+      "suggestion": "Не менять тесты; при заведении CI зафиксировать, что -short не является достаточным прогоном.",
+      "test": null
+    },
+    {
+      "severity": "note",
+      "title": "Таблица парности прав слепа к роли deployer",
+      "file": "internal/integration/r6_parity_test.go",
+      "line": 210,
+      "impact": "TestPermissionParityAPIvsUI исключает deployer (нет PermUI) и сверяет матрицу только по ролям с PermUI. Проверено экспериментально: если повесить PATCH версии на PermRead вместо PermVersion, таблица остаётся зелёной — расходятся только права deployer. Поймал отдельный TestNewPlatformRoutesFollowRoleMatrix; у операций прежних волн такого теста нет.",
+      "suggestion": "При следующем касании прогонять API-половину таблицы и для deployer, UI-половину по-прежнему пропускать.",
+      "test": null
+    }
+  ],
+  "sensitivity_check": {
+    "spot_check": { "tests_checked": 8, "detected_defect": 8 },
+    "not_overspecified": {
+      "checked": true,
+      "green_after_fix": false,
+      "detail": "На временной копии репозитория (/tmp/fixcopy) с предлагаемой правкой находки 1 набор зелёный кроме internal/web/web_t26_test.go › TestUploadWithManualPlatform/указанное_перевешивает_определённое — теста самого T26, закрепляющего противоположный контракт. Ни один тест R8 правки не потребовал. Это подтверждает, что находка 1 — конфликт двух решений, а не пропущенная строчка."
+    },
+    "mutation": { "run": false, "reason": "инструмент в проекте не настроен" },
+    "production_code_restored": true
+  },
+  "report_md": "docs/plans/reviews/app-artifactory-R8-test.md",
+  "next_action": "Завести F21: выбрать единый контракт для расхождения платформы в API и UI (находка 1) и написать документацию волны 8 (находка 2). Следующую волну до этого не начинать."
+}
